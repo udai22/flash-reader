@@ -184,29 +184,9 @@
             currentWPM = newWPM;
             wpmInput.value = currentWPM;
             
-            // If currently reading, adjust timing immediately
-            if (isPlaying && !isPaused) {
-                // Clear existing interval
-                clearInterval(readingInterval);
-                
-                // Calculate time since last word
-                const now = Date.now();
-                const timeSinceLastWord = now - lastWordTime;
-                const newInterval = calculateInterval(currentWPM);
-                
-                // Start new interval
-                readingInterval = setInterval(() => {
-                    lastWordTime = Date.now();
-                    if (currentWordIndex >= words.length) {
-                        stopReading();
-                        return;
-                    }
-                    
-                    const currentWord = words[currentWordIndex];
-                    document.getElementById('flashDisplay').textContent = currentWord;
-                    currentWordIndex++;
-                    updateProgress();
-                }, newInterval);
+            // If currently reading, restart interval with new speed
+            if (isPlaying) {
+                startInterval();
             }
             
             // Update display
@@ -225,14 +205,22 @@
             isPlaying = true;
             document.getElementById('startBtn').classList.add('hidden');
             document.getElementById('pauseBtn').classList.remove('hidden');
+            document.getElementById('pauseBtn').textContent = 'Pause';
             document.getElementById('stopBtn').classList.remove('hidden');
             
-            currentWPM = parseInt(wpmInput.value);
+            // Start the reading interval
+            startInterval();
+        }
+
+        function startInterval() {
+            if (readingInterval) {
+                clearInterval(readingInterval);
+            }
+            
             const interval = calculateInterval(currentWPM);
             lastWordTime = Date.now();
             
             readingInterval = setInterval(() => {
-                lastWordTime = Date.now();
                 if (currentWordIndex >= words.length) {
                     stopReading();
                     return;
@@ -241,30 +229,31 @@
                 displayCurrentWord();
                 currentWordIndex++;
                 updateProgress();
+                lastWordTime = Date.now();
             }, interval);
         }
 
         function pauseReading() {
             isPlaying = false;
-            document.getElementById('pauseBtn').textContent = 'Resume';
             if (readingInterval) {
                 clearInterval(readingInterval);
                 readingInterval = null;
             }
+            document.getElementById('pauseBtn').textContent = 'Resume';
         }
 
         function resumeReading() {
-            if (!isPlaying || !isPaused) return;
-            
-            isPaused = false;
+            isPlaying = true;
             document.getElementById('pauseBtn').textContent = 'Pause';
-            startReading();
+            startInterval();
         }
 
         function stopReading() {
-            if (!isPlaying) return;
-            
             isPlaying = false;
+            if (readingInterval) {
+                clearInterval(readingInterval);
+                readingInterval = null;
+            }
             document.getElementById('flashDisplay').textContent = 'Click Start to begin reading';
             document.getElementById('startBtn').classList.remove('hidden');
             document.getElementById('pauseBtn').classList.add('hidden');
@@ -301,9 +290,9 @@
         document.getElementById('startBtn').addEventListener('click', startReading);
         document.getElementById('pauseBtn').addEventListener('click', () => {
             if (isPlaying) {
-                resumeReading();
-            } else {
                 pauseReading();
+            } else {
+                resumeReading();
             }
         });
         document.getElementById('stopBtn').addEventListener('click', stopReading);
@@ -353,13 +342,9 @@
                 case ' ':
                     e.preventDefault();
                     if (isPlaying) {
-                        if (isPaused) {
-                            resumeReading();
-                        } else {
-                            pauseReading();
-                        }
+                        pauseReading();
                     } else {
-                        startReading();
+                        resumeReading();
                     }
                     break;
                 case 'ArrowUp':
