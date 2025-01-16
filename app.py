@@ -357,16 +357,16 @@ def get_processing_status(book_id):
         'word_count': book.word_count
     })
 
+# Initialize database on startup
+with app.app_context():
+    db.create_all()
+    logger.info("Database initialized")
+
 if __name__ == '__main__':
     # Create required directories if they don't exist
     os.makedirs('uploads', exist_ok=True)
     os.makedirs('outputs', exist_ok=True)
     os.makedirs('stitched_content', exist_ok=True)
-    
-    # Initialize database
-    with app.app_context():
-        db.create_all()
-        logger.info("Database initialized")
     
     # Get port from environment variable (for Replit) or use default
     port = int(os.environ.get('PORT', 5000))
