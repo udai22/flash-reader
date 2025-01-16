@@ -296,6 +296,17 @@ def get_processing_status(book_id):
     })
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True) 
+    # Create required directories if they don't exist
+    os.makedirs('uploads', exist_ok=True)
+    os.makedirs('outputs', exist_ok=True)
+    os.makedirs('stitched_content', exist_ok=True)
+    
+    # Get port from environment variable (for Replit) or use default
+    port = int(os.environ.get('PORT', 5000))
+    
+    # Run the app
+    app.run(
+        host='0.0.0.0',  # Required for Replit
+        port=port,
+        debug=False  # Set to False for production
+    ) 

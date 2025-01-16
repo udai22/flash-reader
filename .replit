@@ -1,0 +1,19 @@
+run = "python app.py"
+language = "python3"
+
+[nix]
+channel = "stable-22_11"
+
+[env]
+PYTHONPATH = "${PYTHONPATH}:${workspaceFolder}"
+FLASK_APP = "app.py"
+FLASK_ENV = "production"
+
+[languages]
+python = "3.9"
+
+[languages.python]
+pattern = "**/*.py"
+
+[languages.python.languageServer]
+start = "pylsp" 
