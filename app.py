@@ -9,27 +9,31 @@ import json
 import shutil
 import logging
 
+# Get base directory
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 # Configure detailed logging
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
     handlers=[
-        logging.FileHandler('app.log'),
+        logging.FileHandler(os.path.join(BASE_DIR, 'app.log')),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///books.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(BASE_DIR, "books.db")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Ensure upload directories exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs('outputs', exist_ok=True)
-os.makedirs('stitched_content', exist_ok=True)
+os.makedirs(os.path.join(BASE_DIR, 'outputs'), exist_ok=True)
+os.makedirs(os.path.join(BASE_DIR, 'stitched_content'), exist_ok=True)
+os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
 
 db = SQLAlchemy(app)
 
@@ -175,13 +179,13 @@ def process_pdf(book_id):
 def get_default_books():
     """Get or create the default books"""
     # Create directories if they don't exist
-    os.makedirs('stitched_content', exist_ok=True)
-    os.makedirs('outputs', exist_ok=True)
+    os.makedirs(os.path.join(BASE_DIR, 'stitched_content'), exist_ok=True)
+    os.makedirs(os.path.join(BASE_DIR, 'outputs'), exist_ok=True)
     
     # Create welcome book if it doesn't exist
     welcome_book = Book.query.filter_by(title='Welcome to Flash Reader').first()
     if not welcome_book:
-        default_path = 'stitched_content/welcome.txt'
+        default_path = os.path.join(BASE_DIR, 'stitched_content', 'welcome.txt')
         default_content = """Welcome to Flash Reader!
 
 This is a modern web-based speed reading application that helps you read faster and more efficiently. You can:
@@ -218,16 +222,16 @@ Enjoy reading at your own pace!"""
     philosophia_book = Book.query.filter_by(title='Philosophia Ultima').first()
     if not philosophia_book:
         # First check in outputs directory, then in data directory
-        json_path = 'outputs/Philosophia_Ultima.json'
+        json_path = os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json')
         if not os.path.exists(json_path):
-            json_path = 'data/Philosophia_Ultima.json'
+            json_path = os.path.join(BASE_DIR, 'data', 'Philosophia_Ultima.json')
             # If found in data, copy to outputs
             if os.path.exists(json_path):
-                os.makedirs('outputs', exist_ok=True)
-                shutil.copy2(json_path, 'outputs/Philosophia_Ultima.json')
-                json_path = 'outputs/Philosophia_Ultima.json'
+                os.makedirs(os.path.join(BASE_DIR, 'outputs'), exist_ok=True)
+                shutil.copy2(json_path, os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json'))
+                json_path = os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json')
         
-        text_path = 'stitched_content/Philosophia_Ultima.txt'
+        text_path = os.path.join(BASE_DIR, 'stitched_content', 'Philosophia_Ultima.txt')
         
         # Process the JSON file using ContentStitcher
         if os.path.exists(json_path):
