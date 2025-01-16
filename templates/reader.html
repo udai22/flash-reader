@@ -103,13 +103,13 @@
     </div>
 
     <script>
+        let isPlaying = false;
+        let currentWordIndex = 0;
         let words = [];
-        let currentIndex = 0;
-        let isReading = false;
-        let isPaused = false;
-        let readingInterval;
-        let phraseMode = false;  // Default to single word mode
-        let phraseSize = 2;
+        let readingInterval = null;
+        let currentWPM = 300;
+        let phraseMode = false;
+        let phraseSize = 3;
         
         // Load book content
         async function loadContent() {
@@ -123,7 +123,7 @@
                     
                     // Prepare words for flash reading
                     words = data.content.split(/\s+/).filter(word => word.length > 0);
-                    currentIndex = data.current_position || 0;
+                    currentWordIndex = data.current_position || 0;
                     document.getElementById('jumpInput').max = words.length - 1;
                     updateProgress();
                     updateDisplay();
@@ -137,12 +137,12 @@
 
         // Update reading progress
         function updateProgress() {
-            const progress = (currentIndex / words.length) * 100;
+            const progress = (currentWordIndex / words.length) * 100;
             document.getElementById('progressBar').style.width = `${progress}%`;
             document.getElementById('progressText').textContent = `${Math.round(progress)}%`;
             document.getElementById('wordCountText').textContent = 
-                `${currentIndex} / ${words.length} words`;
-            document.getElementById('jumpInput').value = currentIndex;
+                `${currentWordIndex} / ${words.length} words`;
+            document.getElementById('jumpInput').value = currentWordIndex;
             
             // Save progress to server
             fetch(`/api/book/{{ book.id }}/position`, {
@@ -150,7 +150,7 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ position: currentIndex })
+                body: JSON.stringify({ position: currentWordIndex })
             });
         }
 
@@ -160,13 +160,12 @@
             const textContent = fullText.textContent;
             const words = textContent.split(/\s+/);
             
-            if (currentIndex < words.length) {
+            if (currentWordIndex < words.length) {
                 // Update flash display without scrolling full text
-                document.getElementById('flashDisplay').textContent = words[currentIndex];
+                document.getElementById('flashDisplay').textContent = words[currentWordIndex];
             }
         }
 
-        let currentWPM = 300; // Default WPM
         let lastWordTime = 0; // Track last word display time
         const wpmInput = document.getElementById('wpmInput');
         
@@ -186,7 +185,7 @@
             wpmInput.value = currentWPM;
             
             // If currently reading, adjust timing immediately
-            if (isReading && !isPaused) {
+            if (isPlaying && !isPaused) {
                 // Clear existing interval
                 clearInterval(readingInterval);
                 
@@ -198,14 +197,14 @@
                 // Start new interval
                 readingInterval = setInterval(() => {
                     lastWordTime = Date.now();
-                    if (currentIndex >= words.length) {
+                    if (currentWordIndex >= words.length) {
                         stopReading();
                         return;
                     }
                     
-                    const currentWord = words[currentIndex];
+                    const currentWord = words[currentWordIndex];
                     document.getElementById('flashDisplay').textContent = currentWord;
-                    currentIndex++;
+                    currentWordIndex++;
                     updateProgress();
                 }, newInterval);
             }
@@ -216,10 +215,14 @@
 
         // Flash reading functions
         function startReading() {
-            if (isReading) return;
+            if (!words.length) return;
             
-            isReading = true;
-            isPaused = false;
+            if (isPlaying) {
+                pauseReading();
+                return;
+            }
+            
+            isPlaying = true;
             document.getElementById('startBtn').classList.add('hidden');
             document.getElementById('pauseBtn').classList.remove('hidden');
             document.getElementById('stopBtn').classList.remove('hidden');
@@ -230,27 +233,28 @@
             
             readingInterval = setInterval(() => {
                 lastWordTime = Date.now();
-                if (currentIndex >= words.length) {
+                if (currentWordIndex >= words.length) {
                     stopReading();
                     return;
                 }
                 
-                updateDisplay();
-                currentIndex++;
+                displayCurrentWord();
+                currentWordIndex++;
                 updateProgress();
             }, interval);
         }
 
         function pauseReading() {
-            if (!isReading || isPaused) return;
-            
-            isPaused = true;
-            clearInterval(readingInterval);
+            isPlaying = false;
             document.getElementById('pauseBtn').textContent = 'Resume';
+            if (readingInterval) {
+                clearInterval(readingInterval);
+                readingInterval = null;
+            }
         }
 
         function resumeReading() {
-            if (!isReading || !isPaused) return;
+            if (!isPlaying || !isPaused) return;
             
             isPaused = false;
             document.getElementById('pauseBtn').textContent = 'Pause';
@@ -258,11 +262,9 @@
         }
 
         function stopReading() {
-            if (!isReading) return;
+            if (!isPlaying) return;
             
-            isReading = false;
-            isPaused = false;
-            clearInterval(readingInterval);
+            isPlaying = false;
             document.getElementById('flashDisplay').textContent = 'Click Start to begin reading';
             document.getElementById('startBtn').classList.remove('hidden');
             document.getElementById('pauseBtn').classList.add('hidden');
@@ -271,16 +273,16 @@
 
         // Navigation functions
         function moveForward() {
-            if (currentIndex < words.length - 1) {
-                currentIndex++;
+            if (currentWordIndex < words.length - 1) {
+                currentWordIndex++;
                 updateDisplay();
                 updateProgress();
             }
         }
 
         function moveBackward() {
-            if (currentIndex > 0) {
-                currentIndex--;
+            if (currentWordIndex > 0) {
+                currentWordIndex--;
                 updateDisplay();
                 updateProgress();
             }
@@ -289,7 +291,7 @@
         function jumpToPosition() {
             const position = parseInt(document.getElementById('jumpInput').value);
             if (position >= 0 && position < words.length) {
-                currentIndex = position;
+                currentWordIndex = position;
                 updateDisplay();
                 updateProgress();
             }
@@ -298,7 +300,7 @@
         // Event listeners
         document.getElementById('startBtn').addEventListener('click', startReading);
         document.getElementById('pauseBtn').addEventListener('click', () => {
-            if (isPaused) {
+            if (isPlaying) {
                 resumeReading();
             } else {
                 pauseReading();
@@ -317,8 +319,8 @@
             const rect = progressBarContainer.getBoundingClientRect();
             const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
             const percentage = x / rect.width;
-            currentIndex = Math.floor(percentage * words.length);
-            document.getElementById('flashDisplay').textContent = words[currentIndex];
+            currentWordIndex = Math.floor(percentage * words.length);
+            document.getElementById('flashDisplay').textContent = words[currentWordIndex];
             updateProgress();
         }
         
@@ -350,7 +352,7 @@
                     break;
                 case ' ':
                     e.preventDefault();
-                    if (isReading) {
+                    if (isPlaying) {
                         if (isPaused) {
                             resumeReading();
                         } else {
@@ -481,7 +483,7 @@
 
         // Update WPM monitor every second
         setInterval(() => {
-            if (isReading && !isPaused) {
+            if (isPlaying && !isPaused) {
                 const now = Date.now();
                 const actualInterval = now - lastWordTime;
                 const actualWPM = Math.round(60000 / actualInterval);
@@ -512,7 +514,7 @@
                 return;
             }
             
-            singleWordDisplay.textContent = words[currentIndex] || '';
+            singleWordDisplay.textContent = words[currentWordIndex] || '';
         }
 
         function updatePhraseDisplay() {
@@ -529,12 +531,12 @@
             }
 
             // Calculate the window of words to show
-            const windowStart = Math.max(0, currentIndex - Math.floor(phraseSize / 2));
+            const windowStart = Math.max(0, currentWordIndex - Math.floor(phraseSize / 2));
             const windowEnd = Math.min(words.length, windowStart + phraseSize);
             const windowWords = words.slice(windowStart, windowEnd);
 
             // Create the display with the current word highlighted
-            const currentRelativeIndex = currentIndex - windowStart;
+            const currentRelativeIndex = currentWordIndex - windowStart;
             
             container.innerHTML = windowWords.map((word, index) => {
                 if (index === currentRelativeIndex) {
@@ -597,6 +599,57 @@
             }
         `;
         document.head.appendChild(style);
+
+        function displayCurrentWord() {
+            if (currentWordIndex >= words.length) return;
+            
+            const flashDisplay = document.getElementById('flashDisplay');
+            if (phraseMode) {
+                // Calculate phrase window
+                const halfSize = Math.floor(phraseSize / 2);
+                const start = Math.max(0, currentWordIndex - halfSize);
+                const end = Math.min(words.length, currentWordIndex + halfSize + 1);
+                
+                let phrase = '';
+                for (let i = start; i < end; i++) {
+                    if (i === currentWordIndex) {
+                        phrase += `<span class="current-word">${words[i]}</span>`;
+                    } else {
+                        phrase += `<span class="context-word">${words[i]}</span>`;
+                    }
+                    phrase += ' ';
+                }
+                flashDisplay.innerHTML = phrase;
+            } else {
+                flashDisplay.innerHTML = `<span class="current-word">${words[currentWordIndex]}</span>`;
+            }
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load content
+            fetch(`/api/book/${bookId}/content`)
+                .then(response => response.json())
+                .then(data => {
+                    words = data.content.split(/\s+/);
+                    currentWordIndex = data.current_position || 0;
+                    displayCurrentWord();
+                    updateProgress();
+                });
+            
+            // Play/Pause button
+            document.getElementById('startBtn').addEventListener('click', startReading);
+            
+            // Space bar for play/pause
+            document.addEventListener('keydown', function(e) {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    startReading();
+                }
+            });
+            
+            // Other event listeners...
+        });
     </script>
 </body>
 </html> 
