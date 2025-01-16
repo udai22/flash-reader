@@ -18,6 +18,7 @@ guessImports = true
 [languages.python3]
 pattern = "**/*.py"
 syntax = "python"
+version = "3.12"
 
 [languages.python3.languageServer]
 start = ["pylsp"] 
