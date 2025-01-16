@@ -17,6 +17,7 @@ stitched_content/
 *.db
 *.pdf
 *.json
+!data/*.json  # Allow JSON files in data directory
 
 # IDE
 .vscode/
