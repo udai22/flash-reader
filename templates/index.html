@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Reader & Flash Reader</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold mb-8 text-center text-gray-800">PDF Reader & Flash Reader</h1>
+        
+        <!-- Upload Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4">Upload PDF</h2>
+            <form id="uploadForm" class="space-y-4">
+                <div class="flex items-center justify-center w-full">
+                    <label class="flex flex-col w-full h-32 border-4 border-dashed hover:bg-gray-100 hover:border-gray-300">
+                        <div class="flex flex-col items-center justify-center pt-7">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-gray-400 group-hover:text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
+                            </svg>
+                            <p class="pt-1 text-sm tracking-wider text-gray-400 group-hover:text-gray-600">
+                                Select a PDF file
+                            </p>
+                        </div>
+                        <input type="file" class="opacity-0" accept=".pdf" id="pdfFile" />
+                    </label>
+                </div>
+                <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition duration-200">
+                    Upload PDF
+                </button>
+            </form>
+        </div>
+
+        <!-- Books List -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-2xl font-semibold mb-4">Your Books</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for book in books %}
+                <div class="border rounded-lg p-4 hover:shadow-lg transition duration-200">
+                    <h3 class="text-xl font-semibold mb-2">{{ book.title }}</h3>
+                    <p class="text-gray-600 mb-2">Uploaded: {{ book.upload_date }}</p>
+                    <p class="text-gray-600 mb-2">Status: 
+                        <span class="
+                            {% if book.processing_status == 'completed' %}text-green-500
+                            {% elif book.processing_status == 'failed' %}text-red-500
+                            {% else %}text-yellow-500{% endif %}
+                        ">
+                            {{ book.processing_status }}
+                        </span>
+                    </p>
+                    {% if book.processing_status == 'completed' %}
+                    <p class="text-gray-600 mb-4">Words: {{ book.word_count }}</p>
+                    <a href="{{ url_for('view_book', book_id=book.id) }}" 
+                       class="inline-block bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition duration-200">
+                        Read Book
+                    </a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('pdfFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('File uploaded successfully!');
+                    location.reload();
+                } else {
+                    alert(result.error || 'Upload failed');
+                }
+            } catch (error) {
+                alert('Upload failed: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html> 

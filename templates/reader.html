@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ book.title }} - Flash Reader</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <a href="/" class="text-blue-500 hover:text-blue-600">← Back to Library</a>
+            <h1 class="text-3xl font-bold text-gray-800">{{ book.title }}</h1>
+            <div class="w-20"></div>
+        </div>
+
+        <!-- Reader Controls -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex flex-wrap gap-4 justify-between items-center mb-6">
+                <div class="space-x-2">
+                    <button id="startBtn" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                        Start Flash Reading
+                    </button>
+                    <button id="pauseBtn" class="bg-yellow-500 text-white py-2 px-4 rounded hover:bg-yellow-600 hidden">
+                        Pause
+                    </button>
+                    <button id="stopBtn" class="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 hidden">
+                        Stop
+                    </button>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <label class="text-gray-700">Speed (WPM):</label>
+                    <input type="number" id="wpmInput" value="300" min="100" max="1000" step="50"
+                           class="border rounded px-2 py-1 w-24">
+                </div>
+                <div class="flex items-center space-x-4">
+                    <label class="text-gray-700">Font Size:</label>
+                    <input type="range" id="fontSizeInput" min="16" max="48" value="24"
+                           class="w-32">
+                    <span id="fontSizeValue">24px</span>
+                </div>
+            </div>
+
+            <!-- Navigation Controls -->
+            <div class="flex justify-center space-x-4 mb-4">
+                <button id="prevBtn" class="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600">
+                    ← Previous
+                </button>
+                <button id="nextBtn" class="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600">
+                    Next →
+                </button>
+            </div>
+
+            <!-- Jump to Position -->
+            <div class="flex items-center space-x-4 mb-4">
+                <label class="text-gray-700">Jump to Word:</label>
+                <input type="number" id="jumpInput" value="0" min="0" class="border rounded px-2 py-1 w-24">
+                <button id="jumpBtn" class="bg-blue-500 text-white py-1 px-3 rounded hover:bg-blue-600">
+                    Jump
+                </button>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="relative w-full bg-gray-200 rounded-full h-2.5 mb-4 cursor-pointer" id="progressBarContainer">
+                <div id="progressBar" class="bg-blue-500 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between text-sm text-gray-600">
+                <span id="progressText">0%</span>
+                <span id="wordCountText">0 / {{ book.word_count }} words</span>
+            </div>
+        </div>
+
+        <!-- Flash Reading Display -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex items-center space-x-4 mb-4">
+                <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="phraseMode" class="form-checkbox h-4 w-4 text-blue-600">
+                    <label class="text-gray-700">Phrase Mode</label>
+                </div>
+                <div id="phraseSizeControl" class="flex items-center space-x-4" style="display: none;">
+                    <label class="text-gray-700">Context Size:</label>
+                    <input type="range" id="phraseSizeInput" min="3" max="10" value="5" class="w-32">
+                    <span id="phraseSizeValue">5 words</span>
+                </div>
+            </div>
+            <div id="flashDisplay" class="text-center py-12 min-h-[200px] flex items-center justify-center">
+                <div id="singleWordDisplay" class="text-4xl font-bold" style="display: block;">
+                    Click Start to begin reading
+                </div>
+                <div id="phraseDisplay" class="text-2xl w-full max-w-3xl mx-auto" style="display: none;">
+                    <div class="phrase-container whitespace-nowrap overflow-hidden text-center"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Normal Reading View -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-2xl font-semibold mb-4">Full Text</h2>
+            <div id="fullText" class="prose max-w-none text-lg leading-relaxed">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let words = [];
+        let currentIndex = 0;
+        let isReading = false;
+        let isPaused = false;
+        let readingInterval;
+        let phraseMode = false;  // Default to single word mode
+        let phraseSize = 2;
+        
+        // Load book content
+        async function loadContent() {
+            try {
+                const response = await fetch(`/api/book/{{ book.id }}/content`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Set full text
+                    document.getElementById('fullText').textContent = data.content;
+                    
+                    // Prepare words for flash reading
+                    words = data.content.split(/\s+/).filter(word => word.length > 0);
+                    currentIndex = data.current_position || 0;
+                    document.getElementById('jumpInput').max = words.length - 1;
+                    updateProgress();
+                    updateDisplay();
+                } else {
+                    alert('Error loading content: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error loading content: ' + error.message);
+            }
+        }
+
+        // Update reading progress
+        function updateProgress() {
+            const progress = (currentIndex / words.length) * 100;
+            document.getElementById('progressBar').style.width = `${progress}%`;
+            document.getElementById('progressText').textContent = `${Math.round(progress)}%`;
+            document.getElementById('wordCountText').textContent = 
+                `${currentIndex} / ${words.length} words`;
+            document.getElementById('jumpInput').value = currentIndex;
+            
+            // Save progress to server
+            fetch(`/api/book/{{ book.id }}/position`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ position: currentIndex })
+            });
+        }
+
+        // Highlight current word in full text
+        function highlightCurrentWord() {
+            const fullText = document.getElementById('fullText');
+            const textContent = fullText.textContent;
+            const words = textContent.split(/\s+/);
+            
+            if (currentIndex < words.length) {
+                // Update flash display without scrolling full text
+                document.getElementById('flashDisplay').textContent = words[currentIndex];
+            }
+        }
+
+        let currentWPM = 300; // Default WPM
+        let lastWordTime = 0; // Track last word display time
+        const wpmInput = document.getElementById('wpmInput');
+        
+        function calculateInterval(wpm) {
+            // Base interval calculation
+            const baseInterval = 60000 / wpm;
+            
+            // Adjust for word length (optional)
+            // return baseInterval * (1 + (word.length > 8 ? 0.3 : 0));
+            return baseInterval;
+        }
+
+        function updateWPM(newWPM) {
+            // Ensure WPM is within bounds
+            newWPM = Math.max(100, Math.min(1000, newWPM));
+            currentWPM = newWPM;
+            wpmInput.value = currentWPM;
+            
+            // If currently reading, adjust timing immediately
+            if (isReading && !isPaused) {
+                // Clear existing interval
+                clearInterval(readingInterval);
+                
+                // Calculate time since last word
+                const now = Date.now();
+                const timeSinceLastWord = now - lastWordTime;
+                const newInterval = calculateInterval(currentWPM);
+                
+                // Start new interval
+                readingInterval = setInterval(() => {
+                    lastWordTime = Date.now();
+                    if (currentIndex >= words.length) {
+                        stopReading();
+                        return;
+                    }
+                    
+                    const currentWord = words[currentIndex];
+                    document.getElementById('flashDisplay').textContent = currentWord;
+                    currentIndex++;
+                    updateProgress();
+                }, newInterval);
+            }
+            
+            // Update display
+            updateWPMDisplay();
+        }
+
+        // Flash reading functions
+        function startReading() {
+            if (isReading) return;
+            
+            isReading = true;
+            isPaused = false;
+            document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('pauseBtn').classList.remove('hidden');
+            document.getElementById('stopBtn').classList.remove('hidden');
+            
+            currentWPM = parseInt(wpmInput.value);
+            const interval = calculateInterval(currentWPM);
+            lastWordTime = Date.now();
+            
+            readingInterval = setInterval(() => {
+                lastWordTime = Date.now();
+                if (currentIndex >= words.length) {
+                    stopReading();
+                    return;
+                }
+                
+                updateDisplay();
+                currentIndex++;
+                updateProgress();
+            }, interval);
+        }
+
+        function pauseReading() {
+            if (!isReading || isPaused) return;
+            
+            isPaused = true;
+            clearInterval(readingInterval);
+            document.getElementById('pauseBtn').textContent = 'Resume';
+        }
+
+        function resumeReading() {
+            if (!isReading || !isPaused) return;
+            
+            isPaused = false;
+            document.getElementById('pauseBtn').textContent = 'Pause';
+            startReading();
+        }
+
+        function stopReading() {
+            if (!isReading) return;
+            
+            isReading = false;
+            isPaused = false;
+            clearInterval(readingInterval);
+            document.getElementById('flashDisplay').textContent = 'Click Start to begin reading';
+            document.getElementById('startBtn').classList.remove('hidden');
+            document.getElementById('pauseBtn').classList.add('hidden');
+            document.getElementById('stopBtn').classList.add('hidden');
+        }
+
+        // Navigation functions
+        function moveForward() {
+            if (currentIndex < words.length - 1) {
+                currentIndex++;
+                updateDisplay();
+                updateProgress();
+            }
+        }
+
+        function moveBackward() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateDisplay();
+                updateProgress();
+            }
+        }
+
+        function jumpToPosition() {
+            const position = parseInt(document.getElementById('jumpInput').value);
+            if (position >= 0 && position < words.length) {
+                currentIndex = position;
+                updateDisplay();
+                updateProgress();
+            }
+        }
+
+        // Event listeners
+        document.getElementById('startBtn').addEventListener('click', startReading);
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            if (isPaused) {
+                resumeReading();
+            } else {
+                pauseReading();
+            }
+        });
+        document.getElementById('stopBtn').addEventListener('click', stopReading);
+        document.getElementById('nextBtn').addEventListener('click', moveForward);
+        document.getElementById('prevBtn').addEventListener('click', moveBackward);
+        document.getElementById('jumpBtn').addEventListener('click', jumpToPosition);
+        
+        // Progress bar interaction
+        let isDragging = false;
+        const progressBarContainer = document.getElementById('progressBarContainer');
+        
+        function updatePositionFromProgressBar(e) {
+            const rect = progressBarContainer.getBoundingClientRect();
+            const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+            const percentage = x / rect.width;
+            currentIndex = Math.floor(percentage * words.length);
+            document.getElementById('flashDisplay').textContent = words[currentIndex];
+            updateProgress();
+        }
+        
+        progressBarContainer.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            updatePositionFromProgressBar(e);
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                updatePositionFromProgressBar(e);
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // Keyboard shortcuts for quick navigation
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowRight':
+                    e.preventDefault();
+                    moveForward();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    moveBackward();
+                    break;
+                case ' ':
+                    e.preventDefault();
+                    if (isReading) {
+                        if (isPaused) {
+                            resumeReading();
+                        } else {
+                            pauseReading();
+                        }
+                    } else {
+                        startReading();
+                    }
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    updateWPM(currentWPM + 50);
+                    break;
+                case 'ArrowDown':
+                    e.preventDefault();
+                    updateWPM(currentWPM - 50);
+                    break;
+                case 'p':  // Add shortcut to toggle phrase mode
+                    e.preventDefault();
+                    const phraseToggle = document.getElementById('phraseMode');
+                    phraseToggle.checked = !phraseToggle.checked;
+                    phraseMode = phraseToggle.checked;
+                    document.getElementById('phraseSizeControl').style.display = 
+                        phraseMode ? 'flex' : 'none';
+                    updateDisplay();
+                    break;
+                case '[':
+                    if (phraseMode) {
+                        e.preventDefault();
+                        phraseSize = Math.max(0, phraseSize - 1);
+                        phraseSizeInput.value = phraseSize;
+                        phraseSizeValue.textContent = `${phraseSize} words`;
+                        updateDisplay();
+                    }
+                    break;
+                case ']':
+                    if (phraseMode) {
+                        e.preventDefault();
+                        phraseSize = Math.min(6, phraseSize + 1);
+                        phraseSizeInput.value = phraseSize;
+                        phraseSizeValue.textContent = `${phraseSize} words`;
+                        updateDisplay();
+                    }
+                    break;
+            }
+        });
+
+        // Font size control
+        const fontSizeInput = document.getElementById('fontSizeInput');
+        const fontSizeValue = document.getElementById('fontSizeValue');
+        let flashDisplay = document.getElementById('flashDisplay');
+        
+        fontSizeInput.addEventListener('input', (e) => {
+            const size = e.target.value;
+            fontSizeValue.textContent = `${size}px`;
+            flashDisplay.style.fontSize = `${size}px`;
+        });
+
+        // Make the progress bar more prominent
+        document.getElementById('progressBarContainer').classList.add('h-4');
+        document.getElementById('progressBar').classList.add('h-4');
+
+        // Hide full text by default
+        document.querySelector('.prose').style.display = 'none';
+
+        // Add toggle button for full text
+        const toggleTextBtn = document.createElement('button');
+        toggleTextBtn.textContent = 'Toggle Full Text';
+        toggleTextBtn.className = 'bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600 mt-4';
+        toggleTextBtn.onclick = () => {
+            const fullText = document.querySelector('.prose');
+            fullText.style.display = fullText.style.display === 'none' ? 'block' : 'none';
+        };
+        document.querySelector('.bg-white:last-child').insertBefore(
+            toggleTextBtn, 
+            document.querySelector('.prose')
+        );
+
+        // Load content when page loads
+        loadContent();
+
+        // WPM input handler
+        wpmInput.addEventListener('change', (e) => {
+            updateWPM(parseInt(e.target.value));
+        });
+
+        // Add WPM adjustment buttons
+        const speedControls = document.createElement('div');
+        speedControls.className = 'flex items-center space-x-2';
+        speedControls.innerHTML = `
+            <button class="bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600" id="decreaseWPM">-50</button>
+            <button class="bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600" id="increaseWPM">+50</button>
+        `;
+        wpmInput.parentNode.appendChild(speedControls);
+
+        document.getElementById('decreaseWPM').addEventListener('click', () => {
+            updateWPM(currentWPM - 50);
+        });
+
+        document.getElementById('increaseWPM').addEventListener('click', () => {
+            updateWPM(currentWPM + 50);
+        });
+
+        // Add WPM display
+        const wpmDisplay = document.createElement('div');
+        wpmDisplay.className = 'text-sm text-gray-600 mt-1';
+        wpmDisplay.id = 'wpmDisplay';
+        wpmDisplay.textContent = `Reading speed: ${currentWPM} words per minute`;
+        wpmInput.parentNode.appendChild(wpmDisplay);
+
+        function updateWPMDisplay() {
+            document.getElementById('wpmDisplay').textContent = 
+                `Reading speed: ${currentWPM} words per minute`;
+        }
+
+        // Update the original updateWPM function to include display update
+        const originalUpdateWPM = updateWPM;
+        updateWPM = function(newWPM) {
+            originalUpdateWPM(newWPM);
+            updateWPMDisplay();
+        };
+
+        // Add real-time WPM monitoring
+        const wpmMonitor = document.createElement('div');
+        wpmMonitor.className = 'text-sm text-gray-600 mt-1';
+        wpmMonitor.id = 'wpmMonitor';
+        wpmInput.parentNode.appendChild(wpmMonitor);
+
+        // Update WPM monitor every second
+        setInterval(() => {
+            if (isReading && !isPaused) {
+                const now = Date.now();
+                const actualInterval = now - lastWordTime;
+                const actualWPM = Math.round(60000 / actualInterval);
+                document.getElementById('wpmMonitor').textContent = 
+                    `Actual speed: ${actualWPM} WPM`;
+            } else {
+                document.getElementById('wpmMonitor').textContent = '';
+            }
+        }, 1000);
+
+        function updateDisplay() {
+            if (phraseMode) {
+                updatePhraseDisplay();
+            } else {
+                updateSingleWordDisplay();
+            }
+        }
+
+        function updateSingleWordDisplay() {
+            const singleWordDisplay = document.getElementById('singleWordDisplay');
+            const phraseDisplay = document.getElementById('phraseDisplay');
+            
+            singleWordDisplay.style.display = 'block';
+            phraseDisplay.style.display = 'none';
+            
+            if (!words.length) {
+                singleWordDisplay.textContent = 'Click Start to begin reading';
+                return;
+            }
+            
+            singleWordDisplay.textContent = words[currentIndex] || '';
+        }
+
+        function updatePhraseDisplay() {
+            const singleWordDisplay = document.getElementById('singleWordDisplay');
+            const phraseDisplay = document.getElementById('phraseDisplay');
+            const container = phraseDisplay.querySelector('.phrase-container');
+            
+            singleWordDisplay.style.display = 'none';
+            phraseDisplay.style.display = 'block';
+            
+            if (!words.length) {
+                container.textContent = 'Click Start to begin reading';
+                return;
+            }
+
+            // Calculate the window of words to show
+            const windowStart = Math.max(0, currentIndex - Math.floor(phraseSize / 2));
+            const windowEnd = Math.min(words.length, windowStart + phraseSize);
+            const windowWords = words.slice(windowStart, windowEnd);
+
+            // Create the display with the current word highlighted
+            const currentRelativeIndex = currentIndex - windowStart;
+            
+            container.innerHTML = windowWords.map((word, index) => {
+                if (index === currentRelativeIndex) {
+                    return `<span class="font-bold text-blue-600">${word}</span>`;
+                }
+                return `<span class="text-gray-800">${word}</span>`;
+            }).join(' ');
+        }
+
+        // Update phrase mode toggle handler
+        document.getElementById('phraseMode').addEventListener('change', (e) => {
+            phraseMode = e.target.checked;
+            document.getElementById('phraseSizeControl').style.display = 
+                phraseMode ? 'flex' : 'none';
+            
+            // Adjust display immediately
+            const singleWordDisplay = document.getElementById('singleWordDisplay');
+            const phraseDisplay = document.getElementById('phraseDisplay');
+            
+            if (phraseMode) {
+                singleWordDisplay.style.display = 'none';
+                phraseDisplay.style.display = 'block';
+            } else {
+                singleWordDisplay.style.display = 'block';
+                phraseDisplay.style.display = 'none';
+            }
+            
+            updateDisplay();
+        });
+
+        // Update phrase size control
+        const phraseSizeInput = document.getElementById('phraseSizeInput');
+        const phraseSizeValue = document.getElementById('phraseSizeValue');
+        
+        phraseSizeInput.addEventListener('input', (e) => {
+            phraseSize = parseInt(e.target.value);
+            phraseSizeValue.textContent = `${phraseSize} words`;
+            updateDisplay();
+        });
+
+        // Style updates for better phrase display
+        flashDisplay.style.minHeight = '200px';
+        
+        // Initialize phrase display
+        updateDisplay();
+
+        // Add CSS styles for smooth transitions
+        const style = document.createElement('style');
+        style.textContent = `
+            .phrase-container span {
+                display: inline-block;
+                padding: 0 4px;
+                transition: all 0.2s ease-in-out;
+            }
+            #phraseDisplay {
+                transition: opacity 0.3s ease-in-out;
+            }
+            .font-bold {
+                color: #2563eb;  /* Blue-600 */
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html> 

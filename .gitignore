@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+*.log
+
+# Project specific
+uploads/
+outputs/
+stitched_content/
+*.db
+*.pdf
+*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store 
