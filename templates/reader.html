@@ -390,13 +390,22 @@
         // Font size control
         const fontSizeInput = document.getElementById('fontSizeInput');
         const fontSizeValue = document.getElementById('fontSizeValue');
-        let flashDisplay = document.getElementById('flashDisplay');
         
-        fontSizeInput.addEventListener('input', (e) => {
-            const size = e.target.value;
+        function updateFontSize(size) {
             fontSizeValue.textContent = `${size}px`;
             document.getElementById('singleWordDisplay').style.fontSize = `${size}px`;
             document.getElementById('phraseDisplay').style.fontSize = `${size}px`;
+            document.getElementById('flashDisplay').style.fontSize = `${size}px`;
+        }
+        
+        // Update font size in real-time while sliding
+        fontSizeInput.addEventListener('input', (e) => {
+            updateFontSize(e.target.value);
+        });
+
+        // Also update font size when value changes (for keyboard/programmatic changes)
+        fontSizeInput.addEventListener('change', (e) => {
+            updateFontSize(e.target.value);
         });
 
         // Make the progress bar more prominent
@@ -497,7 +506,7 @@
             
             singleWordDisplay.style.display = 'block';
             phraseDisplay.style.display = 'none';
-            singleWordDisplay.style.fontSize = `${currentFontSize}px`;
+            updateFontSize(currentFontSize);
             
             if (!words.length) {
                 singleWordDisplay.textContent = 'Click Start to begin reading';
@@ -515,7 +524,7 @@
             
             singleWordDisplay.style.display = 'none';
             phraseDisplay.style.display = 'block';
-            phraseDisplay.style.fontSize = `${currentFontSize}px`;
+            updateFontSize(currentFontSize);
             
             if (!words.length) {
                 container.textContent = 'Click Start to begin reading';
@@ -530,32 +539,48 @@
             // Create the display with the current word highlighted
             const currentRelativeIndex = currentWordIndex - windowStart;
             
+            // Join words with explicit spaces and wrap in spans
             container.innerHTML = windowWords.map((word, index) => {
                 if (index === currentRelativeIndex) {
-                    return `<span class="font-bold text-blue-600">${word}</span>`;
+                    return `<span class="current-word">${word}</span>`;
                 }
-                return `<span class="text-gray-800">${word}</span>`;
-            }).join('&nbsp;');
+                return `<span class="context-word">${word}</span>`;
+            }).join(' '); // Use regular space between spans
         }
 
-        // Update phrase mode toggle handler
+        // Update CSS styles for better phrase display
+        const style = document.createElement('style');
+        style.textContent = `
+            .phrase-container {
+                white-space: pre-wrap;
+                word-spacing: 0.5em;
+                line-height: 1.5;
+                padding: 20px;
+            }
+            .phrase-container span {
+                display: inline-block;
+                padding: 0 4px;
+                margin: 0 2px;
+                transition: all 0.2s ease-in-out;
+            }
+            .current-word {
+                color: #2563eb;
+                font-weight: bold;
+            }
+            .context-word {
+                color: #4b5563;
+            }
+            #phraseDisplay {
+                transition: opacity 0.3s ease-in-out;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Update the phrase mode toggle handler
         document.getElementById('phraseMode').addEventListener('change', (e) => {
             phraseMode = e.target.checked;
             document.getElementById('phraseSizeControl').style.display = 
                 phraseMode ? 'flex' : 'none';
-            
-            // Adjust display immediately
-            const singleWordDisplay = document.getElementById('singleWordDisplay');
-            const phraseDisplay = document.getElementById('phraseDisplay');
-            
-            if (phraseMode) {
-                singleWordDisplay.style.display = 'none';
-                phraseDisplay.style.display = 'block';
-            } else {
-                singleWordDisplay.style.display = 'block';
-                phraseDisplay.style.display = 'none';
-            }
-            
             updateDisplay();
         });
 
@@ -575,49 +600,16 @@
         // Initialize phrase display
         updateDisplay();
 
-        // Add CSS styles for smooth transitions
-        const style = document.createElement('style');
-        style.textContent = `
-            .phrase-container {
-                white-space: pre-wrap;
-                word-spacing: 0.5em;
-            }
-            .phrase-container span {
-                display: inline-block;
-                margin: 0 4px;
-                transition: all 0.2s ease-in-out;
-            }
-            #phraseDisplay {
-                transition: opacity 0.3s ease-in-out;
-            }
-            .font-bold {
-                color: #2563eb;
-            }
-        `;
-        document.head.appendChild(style);
-
         function displayCurrentWord() {
             if (currentWordIndex >= words.length) return;
             
-            const flashDisplay = document.getElementById('flashDisplay');
+            const currentFontSize = fontSizeInput.value;
+            updateFontSize(currentFontSize);
+            
             if (phraseMode) {
-                // Calculate phrase window
-                const halfSize = Math.floor(phraseSize / 2);
-                const start = Math.max(0, currentWordIndex - halfSize);
-                const end = Math.min(words.length, currentWordIndex + halfSize + 1);
-                
-                let phrase = '';
-                for (let i = start; i < end; i++) {
-                    if (i === currentWordIndex) {
-                        phrase += `<span class="current-word">${words[i]}</span>`;
-                    } else {
-                        phrase += `<span class="context-word">${words[i]}</span>`;
-                    }
-                    phrase += ' ';
-                }
-                flashDisplay.innerHTML = phrase;
+                updatePhraseDisplay();
             } else {
-                flashDisplay.innerHTML = `<span class="current-word">${words[currentWordIndex]}</span>`;
+                updateSingleWordDisplay();
             }
         }
 
