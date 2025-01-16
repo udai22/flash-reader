@@ -217,7 +217,16 @@ Enjoy reading at your own pace!"""
     # Create Philosophia Ultima book if it doesn't exist
     philosophia_book = Book.query.filter_by(title='Philosophia Ultima').first()
     if not philosophia_book:
+        # First check in outputs directory, then in data directory
         json_path = 'outputs/Philosophia_Ultima.json'
+        if not os.path.exists(json_path):
+            json_path = 'data/Philosophia_Ultima.json'
+            # If found in data, copy to outputs
+            if os.path.exists(json_path):
+                os.makedirs('outputs', exist_ok=True)
+                shutil.copy2(json_path, 'outputs/Philosophia_Ultima.json')
+                json_path = 'outputs/Philosophia_Ultima.json'
+        
         text_path = 'stitched_content/Philosophia_Ultima.txt'
         
         # Process the JSON file using ContentStitcher
