@@ -359,6 +359,11 @@ if __name__ == '__main__':
     os.makedirs('outputs', exist_ok=True)
     os.makedirs('stitched_content', exist_ok=True)
     
+    # Initialize database
+    with app.app_context():
+        db.create_all()
+        logger.info("Database initialized")
+    
     # Get port from environment variable (for Replit) or use default
     port = int(os.environ.get('PORT', 5000))
     
