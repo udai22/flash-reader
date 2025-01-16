@@ -254,7 +254,9 @@
                 clearInterval(readingInterval);
                 readingInterval = null;
             }
-            document.getElementById('flashDisplay').textContent = 'Click Start to begin reading';
+            const currentFontSize = fontSizeInput.value;
+            document.getElementById('flashDisplay').style.fontSize = `${currentFontSize}px`;
+            updateDisplay(); // Use updateDisplay instead of setting text directly
             document.getElementById('startBtn').classList.remove('hidden');
             document.getElementById('pauseBtn').classList.add('hidden');
             document.getElementById('stopBtn').classList.add('hidden');
@@ -393,7 +395,8 @@
         fontSizeInput.addEventListener('input', (e) => {
             const size = e.target.value;
             fontSizeValue.textContent = `${size}px`;
-            flashDisplay.style.fontSize = `${size}px`;
+            document.getElementById('singleWordDisplay').style.fontSize = `${size}px`;
+            document.getElementById('phraseDisplay').style.fontSize = `${size}px`;
         });
 
         // Make the progress bar more prominent
@@ -490,9 +493,11 @@
         function updateSingleWordDisplay() {
             const singleWordDisplay = document.getElementById('singleWordDisplay');
             const phraseDisplay = document.getElementById('phraseDisplay');
+            const currentFontSize = fontSizeInput.value;
             
             singleWordDisplay.style.display = 'block';
             phraseDisplay.style.display = 'none';
+            singleWordDisplay.style.fontSize = `${currentFontSize}px`;
             
             if (!words.length) {
                 singleWordDisplay.textContent = 'Click Start to begin reading';
@@ -506,9 +511,11 @@
             const singleWordDisplay = document.getElementById('singleWordDisplay');
             const phraseDisplay = document.getElementById('phraseDisplay');
             const container = phraseDisplay.querySelector('.phrase-container');
+            const currentFontSize = fontSizeInput.value;
             
             singleWordDisplay.style.display = 'none';
             phraseDisplay.style.display = 'block';
+            phraseDisplay.style.fontSize = `${currentFontSize}px`;
             
             if (!words.length) {
                 container.textContent = 'Click Start to begin reading';
@@ -528,7 +535,7 @@
                     return `<span class="font-bold text-blue-600">${word}</span>`;
                 }
                 return `<span class="text-gray-800">${word}</span>`;
-            }).join(' ');
+            }).join('&nbsp;');
         }
 
         // Update phrase mode toggle handler
@@ -571,16 +578,20 @@
         // Add CSS styles for smooth transitions
         const style = document.createElement('style');
         style.textContent = `
+            .phrase-container {
+                white-space: pre-wrap;
+                word-spacing: 0.5em;
+            }
             .phrase-container span {
                 display: inline-block;
-                padding: 0 4px;
+                margin: 0 4px;
                 transition: all 0.2s ease-in-out;
             }
             #phraseDisplay {
                 transition: opacity 0.3s ease-in-out;
             }
             .font-bold {
-                color: #2563eb;  /* Blue-600 */
+                color: #2563eb;
             }
         `;
         document.head.appendChild(style);
