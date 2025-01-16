@@ -172,33 +172,82 @@ def process_pdf(book_id):
             db.session.commit()
         return False
 
-def get_default_book():
-    """Get or create the default book (Cycles)"""
-    default_book = Book.query.filter_by(title='Cycles—The Science of Prediction').first()
-    if not default_book:
-        default_path = 'stitched_content/CyclesThe_Science_of_Prediction_Edward_R._Dewey.txt'
-        if os.path.exists(default_path):
-            with open(default_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                word_count = len(content.split())
+def get_default_books():
+    """Get or create the default books"""
+    # Create directories if they don't exist
+    os.makedirs('stitched_content', exist_ok=True)
+    os.makedirs('outputs', exist_ok=True)
+    
+    # Create welcome book if it doesn't exist
+    welcome_book = Book.query.filter_by(title='Welcome to Flash Reader').first()
+    if not welcome_book:
+        default_path = 'stitched_content/welcome.txt'
+        default_content = """Welcome to Flash Reader!
+
+This is a modern web-based speed reading application that helps you read faster and more efficiently. You can:
+- Upload your own PDF files for reading
+- Adjust reading speed (WPM)
+- Toggle between single word and phrase mode
+- Track your progress
+- Use keyboard shortcuts for easy control
+
+Try adjusting the speed using the up/down arrow keys, or press space to start/pause reading.
+
+To upload your own PDF, return to the home page and use the upload button. Your PDF will be processed and made available for speed reading.
+
+Enjoy reading at your own pace!"""
+
+        with open(default_path, 'w', encoding='utf-8') as f:
+            f.write(default_content)
+        
+        word_count = len(default_content.split())
+        
+        welcome_book = Book(
+            title='Welcome to Flash Reader',
+            author='Flash Reader Team',
+            text_path=default_path,
+            pdf_path='',  # No PDF for default book
+            processing_status='completed',
+            word_count=word_count
+        )
+        db.session.add(welcome_book)
+        db.session.commit()
+        logger.info("Created welcome book entry")
+
+    # Create Philosophia Ultima book if it doesn't exist
+    philosophia_book = Book.query.filter_by(title='Philosophia Ultima').first()
+    if not philosophia_book:
+        json_path = 'outputs/Philosophia_Ultima.json'
+        text_path = 'stitched_content/Philosophia_Ultima.txt'
+        
+        # Process the JSON file using ContentStitcher
+        if os.path.exists(json_path):
+            stitcher = ContentStitcher()
+            stitcher.stitch_content('Philosophia_Ultima.json')
             
-            default_book = Book(
-                title='Cycles—The Science of Prediction',
-                author='Edward R. Dewey',
-                text_path=default_path,
-                pdf_path='',  # No PDF for default book
-                processing_status='completed',
-                word_count=word_count
-            )
-            db.session.add(default_book)
-            db.session.commit()
-            logger.info("Created default book entry")
-    return default_book
+            if os.path.exists(text_path):
+                with open(text_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    word_count = len(content.split())
+                
+                philosophia_book = Book(
+                    title='Philosophia Ultima',
+                    author='Osho',
+                    text_path=text_path,
+                    pdf_path='',  # No PDF path needed
+                    processing_status='completed',
+                    word_count=word_count
+                )
+                db.session.add(philosophia_book)
+                db.session.commit()
+                logger.info("Created Philosophia Ultima book entry")
+
+    return [welcome_book, philosophia_book] if philosophia_book else [welcome_book]
 
 @app.route('/')
 def index():
-    # Ensure default book exists
-    default_book = get_default_book()
+    # Ensure default books exist
+    default_books = get_default_books()
     books = Book.query.order_by(Book.upload_date.desc()).all()
     return render_template('index.html', books=books)
 
