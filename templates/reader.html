@@ -849,26 +849,29 @@
 
         // New function to update all UI elements
         function updateAllUI() {
-            // Update progress bar and navigation
-            const progress = (state.currentIndex / state.words.length) * 100;
-            document.getElementById('progressNavFill').style.height = `${progress}%`;
-            document.getElementById('progressFill').style.height = `${progress}%`;
+            const currentWord = state.words[state.currentIndex];
             
-            // Update word displays
-            document.getElementById('wordDisplay').textContent = state.words[state.currentIndex] || '';
-            document.getElementById('totalWords').textContent = state.words.length;
+            // Update word display
+            document.getElementById('wordDisplay').textContent = currentWord;
             
-            // Update tooltip content
-            const tooltipContent = `
-                <div>Word ${state.currentIndex} / ${state.words.length} (${Math.round(progress)}%)</div>
-                <div class="word-preview">${state.words[state.currentIndex] || ''}</div>
-            `;
-            document.getElementById('progressNavTooltip').innerHTML = tooltipContent;
+            // Update progress indicators
+            updateProgress();
+            updateProgressNav();
             
-            // Update WPM displays
-            document.getElementById('wpmValue').textContent = state.currentWPM;
-            document.getElementById('wpmValueTop').textContent = state.currentWPM;
-            document.getElementById('wpmIndicatorValue').textContent = state.currentWPM;
+            // Update chapter info if available
+            const currentChapter = state.chapters.find(c => c.position <= state.currentIndex);
+            if (currentChapter) {
+                document.getElementById('chapterNumber').textContent = currentChapter.title;
+            }
+            
+            // Log for debugging
+            console.log('UI Updated:', { 
+                index: state.currentIndex,
+                word: currentWord 
+            });
+            
+            // Save progress
+            saveProgress();
         }
 
         // Event Listeners
@@ -944,18 +947,41 @@
         }
 
         function startReading() {
+            // Clear any existing interval first
+            if (state.readingInterval) {
+                clearInterval(state.readingInterval);
+                state.readingInterval = null;
+            }
+            
+            // Capture current state
+            const startIndex = state.currentIndex;
+            const startWord = state.words[startIndex];
+            
             state.isPlaying = true;
             const interval = calculateInterval(state.currentWPM);
+            
+            // Start from current word
+            const wordDisplay = document.getElementById('wordDisplay');
+            wordDisplay.textContent = startWord;
+            
+            // Log for debugging
+            console.log('Starting reading from:', { 
+                startIndex,
+                startWord,
+                wpm: state.currentWPM
+            });
+            
+            // Set up new interval
             state.readingInterval = setInterval(() => {
-                if (state.currentIndex >= state.words.length) {
+                if (state.currentIndex >= state.words.length - 1) {
                     pauseReading();
                     return;
                 }
                 
-                const wordDisplay = document.getElementById('wordDisplay');
-                wordDisplay.textContent = state.words[state.currentIndex];
                 state.currentIndex++;
+                wordDisplay.textContent = state.words[state.currentIndex];
                 updateProgress();
+                updateProgressNav();
                 saveProgress();
             }, interval);
         }
@@ -1076,16 +1102,6 @@
             // Observe all words for intersection
             contextContent.querySelectorAll('.context-word, .current-word').forEach(wordEl => {
                 observer.observe(wordEl);
-                
-                // Add double-click handler
-                wordEl.addEventListener('dblclick', () => {
-                    const index = parseInt(wordEl.dataset.index);
-                    if (!isNaN(index)) {
-                        state.currentIndex = index;
-                        updateAllUI();
-                        showPositionIndicator();
-                    }
-                });
             });
         }
 
@@ -1129,18 +1145,42 @@
         function hideContextView() {
             if (!state.contextViewActive) return;
             
+            // Store reading state
+            const wasPlaying = state.isPlaying;
+            if (wasPlaying) {
+                pauseReading();
+            }
+            
+            // Capture current state before any changes
+            const currentIndex = state.currentIndex;
+            const currentWord = state.words[currentIndex];
+            
+            // Update view state
             state.contextViewActive = false;
             document.getElementById('contextView').classList.remove('visible');
             
-            // Ensure we're at the current word position when resuming
-            document.getElementById('wordDisplay').textContent = state.words[state.currentIndex];
+            // Ensure we're at the correct word
+            const wordDisplay = document.getElementById('wordDisplay');
+            wordDisplay.textContent = currentWord;
+            
+            // Log for debugging
+            console.log('Exiting context view:', { 
+                currentIndex,
+                currentWord,
+                wasPlaying 
+            });
+            
+            // Update UI synchronously
+            updateProgress();
+            updateProgressNav();
             
             // Save progress
             saveProgress();
             
-            // If we were playing before, resume from new position
-            if (state.isPlaying) {
-                clearInterval(state.readingInterval);
+            // Resume reading if needed, with guaranteed correct position
+            if (wasPlaying) {
+                // Ensure we're at the right position before starting
+                state.currentIndex = currentIndex;
                 startReading();
             }
         }
@@ -1293,25 +1333,42 @@
             span.className = index === state.currentIndex ? 'current-word' : 'context-word';
             span.dataset.index = index;
             
-            // Change back to double-click for better usability
             span.addEventListener('dblclick', () => {
-                // Remove current-word class from previous word
-                const prevWord = document.querySelector('.current-word');
-                if (prevWord) {
-                    prevWord.className = 'context-word';
-                }
-                
-                // Add current-word class to clicked word
-                span.className = 'current-word';
-                
-                // Push to undo stack and update position
+                // Store old position for undo
                 pushToUndoStack(state.currentIndex);
+                
+                // Update state
+                const oldIndex = state.currentIndex;
                 state.currentIndex = index;
-                updateAllUI();
+                
+                // Update word classes in context view
+                document.querySelectorAll('.context-word, .current-word').forEach(el => {
+                    const wordIndex = parseInt(el.dataset.index);
+                    el.className = wordIndex === index ? 'current-word' : 'context-word';
+                });
+                
+                // Update main display immediately
+                const wordDisplay = document.getElementById('wordDisplay');
+                wordDisplay.textContent = state.words[index];
+                
+                // Update all progress indicators
+                updateProgress();
+                updateProgressNav();
                 showPositionIndicator();
                 
-                // Scroll the word into view with some padding
+                // Center the selected word
                 span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Save progress immediately
+                saveProgress();
+                
+                // Log for debugging
+                console.log('Word selected:', { 
+                    oldIndex,
+                    newIndex: index, 
+                    word, 
+                    currentState: state.currentIndex 
+                });
             });
             
             return span;
@@ -1728,6 +1785,14 @@
                 updateAllUI();
                 showPositionIndicator();
             }
+        }
+
+        function updateProgressNav() {
+            const progress = (state.currentIndex / state.words.length) * 100;
+            document.getElementById('progressNavFill').style.height = `${progress}%`;
+            document.getElementById('wordNumber').textContent = state.currentIndex;
+            document.getElementById('totalWords').textContent = state.words.length;
+            document.getElementById('wordPreview').textContent = state.words[state.currentIndex];
         }
     </script>
 </body>
