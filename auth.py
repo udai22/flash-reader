@@ -45,18 +45,19 @@ def login():
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
-
+        
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
-
-        try:
-            user = User.get_by_email(email)
-            if user and check_password_hash(user.password, password):
-                session['user_id'] = user.id
-                return jsonify({'message': 'Login successful', 'redirect': url_for('index')}), 200
-            return jsonify({'error': 'Invalid email or password'}), 401
-        except Exception as e:
-            return jsonify({'error': str(e)}), 400
+        
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            # Create default books for the user
+            from app import get_default_books
+            get_default_books(user.id)
+            return jsonify({'message': 'Login successful'}), 200
+        
+        return jsonify({'error': 'Invalid email or password'}), 401
 
 @auth.route('/logout', methods=['POST'])
 def logout():

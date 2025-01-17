@@ -47,9 +47,26 @@ os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
 # Initialize SQLAlchemy with app
 db.init_app(app)
 
-# Initialize database
+# Initialize default book content if not exists
+def init_default_books():
+    data_dir = os.path.join(BASE_DIR, 'data')
+    os.makedirs(data_dir, exist_ok=True)
+    
+    default_content = {
+        'philosophia_ultima.txt': os.path.join(BASE_DIR, 'stitched_content', 'Philosophia_Ultima.txt'),
+        'cycles_the_science_of_prediction.txt': os.path.join(BASE_DIR, 'stitched_content', 'Cycles—The Science of Prediction, Edward R. Dewey.txt')
+    }
+    
+    for target_file, source_file in default_content.items():
+        target_path = os.path.join(data_dir, target_file)
+        if not os.path.exists(target_path) and os.path.exists(source_file):
+            shutil.copy2(source_file, target_path)
+            logger.info(f"Copied default book content to {target_path}")
+
+# Initialize database and default books
 with app.app_context():
     db.create_all()
+    init_default_books()
     logger.info("Database initialized")
 
 @app.after_request
@@ -192,128 +209,63 @@ def process_pdf(book_id):
             db.session.commit()
         return False
 
-def get_default_books():
-    """Get or create the default books for the current user"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return []
+def get_default_books(user_id):
+    # Create default books for the user if they don't exist
+    default_books = [
+        {
+            'title': 'Philosophia Ultima',
+            'author': 'Osho',
+            'source_path': os.path.join(BASE_DIR, 'data', 'philosophia_ultima.txt'),
+            'user_id': user_id
+        },
+        {
+            'title': 'Cycles—The Science of Prediction',
+            'author': 'Edward R. Dewey',
+            'source_path': os.path.join(BASE_DIR, 'data', 'cycles_the_science_of_prediction.txt'),
+            'user_id': user_id
+        }
+    ]
 
-    # Create directories if they don't exist
-    os.makedirs(os.path.join(BASE_DIR, 'stitched_content'), exist_ok=True)
-    os.makedirs(os.path.join(BASE_DIR, 'outputs'), exist_ok=True)
-    
-    default_books = []
-    
-    # Create welcome book if it doesn't exist for this user
-    welcome_book = Book.query.filter_by(title='Welcome to Flash Reader', user_id=user_id).first()
-    if not welcome_book:
-        default_path = os.path.join(BASE_DIR, 'stitched_content', f'welcome_{user_id}.txt')
-        default_content = """Welcome to Flash Reader!
-
-This is a modern web-based speed reading application that helps you read faster and more efficiently. You can:
-- Upload your own PDF files for reading
-- Adjust reading speed (WPM)
-- Toggle between single word and phrase mode
-- Track your progress
-- Use keyboard shortcuts for easy control
-
-Try adjusting the speed using the up/down arrow keys, or press space to start/pause reading.
-
-To upload your own PDF, return to the home page and use the upload button. Your PDF will be processed and made available for speed reading.
-
-Enjoy reading at your own pace!"""
-
-        with open(default_path, 'w', encoding='utf-8') as f:
-            f.write(default_content)
-        
-        word_count = len(default_content.split())
-        
-        welcome_book = Book(
-            title='Welcome to Flash Reader',
-            author='Flash Reader Team',
-            text_path=default_path,
-            pdf_path='',  # No PDF for default book
-            processing_status='completed',
-            word_count=word_count,
+    for book_data in default_books:
+        # Check if book already exists for this user
+        existing_book = Book.query.filter_by(
+            title=book_data['title'],
             user_id=user_id
-        )
-        db.session.add(welcome_book)
-        db.session.commit()
-        logger.info(f"Created welcome book entry for user {user_id}")
-    
-    default_books.append(welcome_book)
-
-    # Create Philosophia Ultima book if it doesn't exist for this user
-    philosophia_book = Book.query.filter_by(title='Philosophia Ultima', user_id=user_id).first()
-    if not philosophia_book:
-        # First check in outputs directory, then in data directory
-        json_path = os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json')
-        if not os.path.exists(json_path):
-            json_path = os.path.join(BASE_DIR, 'data', 'Philosophia_Ultima.json')
-            # If found in data, copy to outputs
-            if os.path.exists(json_path):
-                os.makedirs(os.path.join(BASE_DIR, 'outputs'), exist_ok=True)
-                shutil.copy2(json_path, os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json'))
-                json_path = os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json')
+        ).first()
         
-        text_path = os.path.join(BASE_DIR, 'stitched_content', f'Philosophia_Ultima_{user_id}.txt')
-        
-        # Process the JSON file using ContentStitcher
-        if os.path.exists(json_path):
-            stitcher = ContentStitcher()
-            stitcher.stitch_content('Philosophia_Ultima.json')
-            
-            if os.path.exists(text_path):
-                with open(text_path, 'r', encoding='utf-8') as f:
+        if not existing_book:
+            source_path = book_data['source_path']
+            if os.path.exists(source_path):
+                # Create user-specific directory if it doesn't exist
+                user_data_dir = os.path.join(BASE_DIR, 'data', str(user_id))
+                os.makedirs(user_data_dir, exist_ok=True)
+                
+                # Set up user-specific file path
+                filename = os.path.basename(source_path)
+                user_file = os.path.join(user_data_dir, filename)
+                
+                # Copy the content to user-specific file
+                shutil.copy2(source_path, user_file)
+                
+                # Calculate word count from the source file
+                with open(source_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     word_count = len(content.split())
                 
-                philosophia_book = Book(
-                    title='Philosophia Ultima',
-                    author='Osho',
-                    text_path=text_path,
-                    pdf_path='',  # No PDF path needed
+                # Create book entry with user-specific path
+                book = Book(
+                    title=book_data['title'],
+                    author=book_data['author'],
+                    text_path=user_file,
+                    user_id=user_id,
                     processing_status='completed',
-                    word_count=word_count,
-                    user_id=user_id
+                    word_count=word_count
                 )
-                db.session.add(philosophia_book)
-                db.session.commit()
-                logger.info(f"Created Philosophia Ultima book entry for user {user_id}")
+                db.session.add(book)
+                logger.info(f"Created default book {book_data['title']} for user {user_id}")
     
-    if philosophia_book:
-        default_books.append(philosophia_book)
-
-    # Create Cycles book if it doesn't exist for this user
-    cycles_book = Book.query.filter_by(title='Cycles—The Science of Prediction', user_id=user_id).first()
-    if not cycles_book:
-        cycles_path = os.path.join(BASE_DIR, 'stitched_content', 'Cycles—The Science of Prediction, Edward R. Dewey.txt')
-        if os.path.exists(cycles_path):
-            # Create a user-specific copy
-            user_cycles_path = os.path.join(BASE_DIR, 'stitched_content', f'Cycles_{user_id}.txt')
-            shutil.copy2(cycles_path, user_cycles_path)
-            
-            with open(user_cycles_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                word_count = len(content.split())
-            
-            cycles_book = Book(
-                title='Cycles—The Science of Prediction',
-                author='Edward R. Dewey',
-                text_path=user_cycles_path,
-                pdf_path='',  # No PDF path needed
-                processing_status='completed',
-                word_count=word_count,
-                user_id=user_id
-            )
-            db.session.add(cycles_book)
-            db.session.commit()
-            logger.info(f"Created Cycles book entry for user {user_id}")
-    
-    if cycles_book:
-        default_books.append(cycles_book)
-
-    return default_books
+    db.session.commit()
+    return Book.query.filter_by(user_id=user_id).all()
 
 def login_required(f):
     @wraps(f)
@@ -329,13 +281,15 @@ def index():
         return redirect(url_for('login'))
     # Get books for the current user
     user_id = session['user_id']
-    default_books = get_default_books()
+    default_books = get_default_books(user_id)
     books = Book.query.filter_by(user_id=user_id).order_by(Book.upload_date.desc()).all()
     return render_template('index.html', books=books)
 
-@app.route('/login')
+@app.route('/login', methods=['GET'])
 def login():
     if 'user_id' in session:
+        # Ensure default books exist for logged-in user
+        get_default_books(session['user_id'])
         return redirect(url_for('index'))
     return render_template('login.html')
 
