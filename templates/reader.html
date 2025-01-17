@@ -67,12 +67,58 @@
             right: 16px;
             top: 16px;
             display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 10002;
+        }
+
+        .theme-buttons {
+            display: flex;
             gap: 8px;
             background: var(--button-bg);
             padding: 4px;
             border-radius: 8px;
-            z-index: 100;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .wpm-controls {
+            background: var(--button-bg);
+            padding: 8px 12px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Context Close Button - New Position */
+        .context-mode-button {
+            margin-top: 8px;
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--button-bg);
+            border: 1px solid var(--progress-bg);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .context-mode-button:hover {
+            background: var(--button-hover);
+        }
+
+        .context-mode-button.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
         }
 
         .theme-button {
@@ -93,6 +139,36 @@
 
         .theme-button:hover:not(.active) {
             background: var(--button-hover);
+        }
+
+        .theme-button[onclick="toggleContextMode()"] {
+            margin-left: 8px;
+            border: 1px solid var(--progress-bg);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .theme-button[onclick="toggleContextMode()"].active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .theme-button.context-close {
+            display: none;
+            margin-left: 8px;
+            border: 1px solid var(--progress-bg);
+            align-items: center;
+            gap: 4px;
+        }
+
+        .context-view.visible ~ .theme-toggle .theme-button[onclick="toggleContextMode()"] {
+            display: none;
+        }
+
+        .context-view.visible ~ .theme-toggle .theme-button.context-close {
+            display: flex;
         }
 
         .reader-container {
@@ -152,6 +228,11 @@
             text-align: center;
             transform-origin: center;
             user-select: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .context-view.visible ~ .word-display {
+            display: none;
         }
 
         /* Context View */
@@ -159,33 +240,31 @@
             position: fixed;
             inset: 0;
             background: var(--surface-color);
-            overflow-y: scroll;
+            overflow-y: auto;
+            visibility: hidden;
             opacity: 0;
             pointer-events: none;
-            transition: all 0.3s ease;
-            z-index: 1000;
-            transform: translateY(20px);
+            transition: opacity 0.3s ease, visibility 0.3s;
+            z-index: 9999;
             -webkit-overflow-scrolling: touch;
-            height: 100%;
-            width: 100%;
-            overscroll-behavior: contain;
-            touch-action: pan-y;
+            height: 100vh;
+            width: 100vw;
         }
 
         .context-view.visible {
+            visibility: visible;
             opacity: 1;
             pointer-events: auto;
-            transform: translateY(0);
         }
 
-        .context-content {
-            max-width: 800px;
-            margin: 0 auto;
-            line-height: 1.8;
-            font-size: 18px;
-            padding: 80px 20px 120px; /* Increased top padding to account for fixed header */
-            position: relative;
-            min-height: calc(100vh - 60px);
+        /* Hide main content when context view is active */
+        .context-view.visible ~ .word-display,
+        .context-view.visible ~ .progress-bar,
+        .context-view.visible ~ .progress-info,
+        .context-view.visible ~ .speed-control,
+        .context-view.visible ~ .wpm-indicator {
+            display: none;
+            pointer-events: none;
         }
 
         .context-header {
@@ -199,19 +278,35 @@
             align-items: center;
             justify-content: space-between;
             padding: 0 16px;
-            z-index: 1002;
-            backdrop-filter: blur(8px);
-            border-bottom: 1px solid rgba(0,0,0,0.1);
+            z-index: 10000;
+            border-bottom: 1px solid var(--progress-bg);
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .context-content {
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.8;
+            font-size: 18px;
+            padding: 80px 20px 120px;
+            position: relative;
+            background: var(--surface-color);
+            min-height: calc(100vh - 60px);
+            z-index: 9999;
         }
 
         .context-word {
             cursor: pointer;
-            padding: 2px 0;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
             display: inline-block;
+            user-select: text;
+            pointer-events: auto;
         }
 
         .context-word:hover {
+            background: var(--progress-bg);
             color: var(--primary-color);
         }
 
@@ -222,12 +317,14 @@
             padding: 2px 4px;
             border-radius: 4px;
             scroll-margin-top: 100px;
+            user-select: text;
+            pointer-events: auto;
         }
 
         .context-close {
             padding: 12px 16px;
             background: var(--surface-color);
-            border: none;
+            border: 1px solid var(--progress-bg);
             border-radius: 8px;
             cursor: pointer;
             color: var(--text-color);
@@ -628,6 +725,58 @@
             background: var(--button-hover);
             transform: scale(0.98);
         }
+
+        /* Hide main word display when context view is active */
+        .context-view.visible ~ .word-display {
+            display: none;
+        }
+
+        /* Ensure theme toggle is above context view */
+        .theme-toggle {
+            z-index: 10002;
+        }
+
+        /* Hide theme toggle in context view */
+        .context-view.visible ~ .theme-toggle {
+            display: none;
+        }
+
+        /* Close button */
+        .context-close-button {
+            padding: 8px 12px;
+            background: var(--surface-color);
+            border: 1px solid var(--progress-bg);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-left: auto;
+            pointer-events: auto;
+            z-index: 10001;
+        }
+
+        .context-close-button:hover {
+            background: var(--progress-bg);
+        }
+
+        /* When context view is active, disable pointer events on reader container */
+        .context-view.visible ~ .reader-container {
+            pointer-events: none;
+        }
+
+        /* But allow pointer events on context view elements */
+        .context-view.visible .context-content,
+        .context-view.visible .context-header,
+        .context-view.visible .context-close-button,
+        .context-view.visible .context-word,
+        .context-view.visible .current-word {
+            pointer-events: auto;
+        }
     </style>
 </head>
 <body>
@@ -637,7 +786,7 @@
         <!-- Theme Toggle and WPM Controls -->
         <div class="theme-toggle">
             <!-- Theme Buttons -->
-            <div class="flex gap-1">
+            <div class="theme-buttons">
                 <button class="theme-button active" data-theme="light">Light</button>
                 <button class="theme-button" data-theme="dark">Dark</button>
                 <button class="theme-button" data-theme="sand">Sand</button>
@@ -659,6 +808,14 @@
                     </svg>
                 </button>
             </div>
+
+            <!-- Context Mode Toggle -->
+            <button class="context-mode-button" onclick="toggleContextMode()" id="contextModeButton">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+                <span>Context View</span>
+            </button>
         </div>
 
         <!-- Progress Bar -->
@@ -679,7 +836,6 @@
         <!-- Context View -->
         <div class="context-view" id="contextView">
             <div class="context-header">
-                <div class="context-title">Context View</div>
                 <div class="chapters-dropdown">
                     <button class="chapters-button" onclick="toggleChaptersList()">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -689,20 +845,12 @@
                     </button>
                     <div class="chapters-list" id="chaptersList"></div>
                 </div>
-                <div class="context-actions">
-                    <button class="context-undo" onclick="undoLastPosition()" title="Undo last position change">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6M3 10l6-6"/>
-                        </svg>
-                        Undo
-                    </button>
-                    <button class="context-close" onclick="hideContextView()">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                        Close
-                    </button>
-                </div>
+                <button class="context-close-button" onclick="hideContextView()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    Close
+                </button>
             </div>
             <div class="context-content" id="contextContent"></div>
             
@@ -778,8 +926,6 @@
             words: [],
             currentWPM: parseInt(localStorage.getItem('reader-wpm')) || 300,
             readingInterval: null,
-            isHolding: false,
-            holdTimeout: null,
             isDraggingSpeed: false,
             baseWPM: 300,
             chapter: 1,
@@ -793,6 +939,7 @@
             chapters: [],
             minBufferSize: 5000,
             contextViewActive: false,
+            wasPlayingBeforeContext: false,
             lastReadingPosition: 0,
             undoStack: [],
             bufferSize: 2000,
@@ -880,15 +1027,10 @@
             
             // Touch/click to start/pause
             container.addEventListener('click', (e) => {
-                if (!state.isHolding) {
+                if (!state.contextViewActive) {
                     toggleReading();
                 }
             });
-
-            // Touch and hold for context
-            container.addEventListener('touchstart', handleTouchStart);
-            container.addEventListener('touchend', handleTouchEnd);
-            container.addEventListener('touchmove', handleTouchMove);
 
             // Keyboard controls
             document.addEventListener('keydown', (e) => {
@@ -1064,7 +1206,6 @@
         // Context View Functions
         function updateContextViewContent() {
             const contextContent = document.getElementById('contextContent');
-            const observer = setupScrollObserver();
             let html = '';
             
             // Add words with chapter indicators
@@ -1082,16 +1223,21 @@
                 html += `<span class="${className}" data-index="${index}">${word}</span> `;
             });
             
-            // Add padding for smooth scrolling
-            html += '<div style="height: 60vh"></div>';
-            
             // Update content
             contextContent.innerHTML = html;
             
-            // Observe all words for intersection
+            // Add click handlers to all words
             contextContent.querySelectorAll('.context-word, .current-word').forEach(wordEl => {
-                observer.observe(wordEl);
+                wordEl.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleWordClick(wordEl);
+                });
             });
+            
+            // Update progress indicators
+            updateProgress();
+            updateProgressNav();
         }
 
         function showPositionIndicator() {
@@ -1106,34 +1252,37 @@
             if (state.contextViewActive) return;
             
             // Store reading state
-            const wasPlaying = state.isPlaying;
-            if (wasPlaying) {
+            state.wasPlayingBeforeContext = state.isPlaying;
+            if (state.wasPlayingBeforeContext) {
                 pauseReading();
             }
             
             const contextView = document.getElementById('contextView');
-            const currentWordIndex = state.currentIndex;
             
             // Set context view as active
             state.contextViewActive = true;
             
             // Initialize viewport range
-            state.viewportStart = Math.max(0, currentWordIndex - state.bufferSize);
-            state.viewportEnd = Math.min(state.words.length, currentWordIndex + state.bufferSize);
+            state.viewportStart = Math.max(0, state.currentIndex - state.bufferSize);
+            state.viewportEnd = Math.min(state.words.length, state.currentIndex + state.bufferSize);
             
-            // Initial content load
-            loadContent(
-                Math.max(0, currentWordIndex - state.bufferSize),
-                currentWordIndex + state.bufferSize
-            );
+            // Initial content load and render
+            updateContextViewContent();
             
             // Show the context view
             contextView.classList.add('visible');
+            document.body.style.overflow = 'hidden'; // Prevent background scrolling
             
-            // Center the current word
-            requestAnimationFrame(() => {
-                scrollToCurrentWord('auto');
-            });
+            // Center the current word with a slight delay to ensure content is rendered
+            setTimeout(() => {
+                const currentWord = document.querySelector('.current-word');
+                if (currentWord) {
+                    currentWord.scrollIntoView({ 
+                        behavior: 'auto',
+                        block: 'center'
+                    });
+                }
+            }, 100);
             
             // Setup scroll listener
             setupInfiniteScroll();
@@ -1142,22 +1291,15 @@
         function hideContextView() {
             if (!state.contextViewActive) return;
             
-            // Store reading state and pause if needed
-            const wasPlaying = state.isPlaying;
-            if (wasPlaying) {
-                pauseReading();
-            }
-            
-            // Capture current state before any changes
-            const currentIndex = state.currentIndex;
-            
             // Update view state
             state.contextViewActive = false;
             document.getElementById('contextView').classList.remove('visible');
+            document.body.style.overflow = ''; // Restore scrolling
             
             // Force synchronization of word display
             const wordDisplay = document.getElementById('wordDisplay');
-            wordDisplay.textContent = state.words[currentIndex];
+            wordDisplay.textContent = state.words[state.currentIndex];
+            wordDisplay.style.display = 'block';
             
             // Update UI synchronously
             updateProgress();
@@ -1166,13 +1308,13 @@
             // Save progress
             saveProgress();
             
-            // Resume reading if needed, with guaranteed correct position
-            if (wasPlaying) {
-                // Small delay to ensure UI is ready
+            // Resume reading if it was playing before context view was opened
+            if (state.wasPlayingBeforeContext) {
                 requestAnimationFrame(() => {
                     startReading();
                 });
             }
+            state.wasPlayingBeforeContext = false; // Reset the state
         }
 
         // Infinite Scroll Setup
@@ -1323,13 +1465,15 @@
             span.className = index === state.currentIndex ? 'current-word' : 'context-word';
             span.dataset.index = index;
             
-            span.addEventListener('dblclick', () => {
+            span.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
                 // Store old position for undo
                 pushToUndoStack(state.currentIndex);
                 
                 // Update state
-                const oldIndex = state.currentIndex;
-                state.currentIndex = index;
+                state.currentIndex = parseInt(index);
                 
                 // Update word classes in context view
                 document.querySelectorAll('.context-word, .current-word').forEach(el => {
@@ -1337,11 +1481,11 @@
                     el.className = wordIndex === index ? 'current-word' : 'context-word';
                 });
                 
-                // Update main display immediately
+                // Update main display
                 const wordDisplay = document.getElementById('wordDisplay');
                 wordDisplay.textContent = state.words[index];
                 
-                // Update all progress indicators
+                // Update progress
                 updateProgress();
                 updateProgressNav();
                 showPositionIndicator();
@@ -1349,16 +1493,8 @@
                 // Center the selected word
                 span.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 
-                // Save progress immediately
+                // Save progress
                 saveProgress();
-                
-                // Log for debugging
-                console.log('Word selected:', { 
-                    oldIndex,
-                    newIndex: index, 
-                    word, 
-                    currentState: state.currentIndex 
-                });
             });
             
             return span;
@@ -1772,8 +1908,25 @@
             if (!isNaN(index)) {
                 pushToUndoStack(state.currentIndex);  // Save current position for undo
                 state.currentIndex = index;
-                updateAllUI();
+                
+                // Update word classes in context view
+                document.querySelectorAll('.context-word, .current-word').forEach(el => {
+                    const wordIndex = parseInt(el.dataset.index);
+                    el.className = wordIndex === index ? 'current-word' : 'context-word';
+                });
+                
+                // Update main display and progress
+                const wordDisplay = document.getElementById('wordDisplay');
+                wordDisplay.textContent = state.words[index];
+                updateProgress();
+                updateProgressNav();
                 showPositionIndicator();
+                
+                // Center the selected word
+                wordEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Save progress
+                saveProgress();
             }
         }
 
@@ -1783,6 +1936,30 @@
             document.getElementById('wordNumber').textContent = state.currentIndex;
             document.getElementById('totalWords').textContent = state.words.length;
             document.getElementById('wordPreview').textContent = state.words[state.currentIndex];
+        }
+
+        // Add context mode toggle function
+        function toggleContextMode() {
+            const contextButton = document.getElementById('contextModeButton');
+            if (state.contextViewActive) {
+                hideContextView();
+                contextButton.classList.remove('active');
+                contextButton.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <span>Context View</span>
+                `;
+            } else {
+                showContextView();
+                contextButton.classList.add('active');
+                contextButton.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    <span>Close View</span>
+                `;
+            }
         }
     </script>
 </body>
