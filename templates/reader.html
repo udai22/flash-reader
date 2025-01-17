@@ -308,49 +308,81 @@
         .wpm-controls {
             display: flex;
             align-items: center;
-            gap: 2px;
+            gap: 12px;
             background: var(--surface-color);
-            padding: 4px;
-            border-radius: 6px;
+            padding: 8px 12px;
+            border-radius: 12px;
             margin-left: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
 
         .wpm-controls button {
-            padding: 6px;
+            width: 44px;
+            height: 44px;
             border: none;
-            border-radius: 4px;
-            background: transparent;
+            border-radius: 10px;
+            background: var(--bg-color);
             color: var(--text-color);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: background-color 0.2s;
+            transition: all 0.2s ease;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            position: relative;
+            padding: 0;
         }
 
-        .wpm-controls button:hover {
-            background: var(--button-hover);
+        .wpm-controls button svg {
+            width: 20px;
+            height: 20px;
+            stroke-width: 2.5;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .wpm-controls button:active {
+            background: var(--primary-color);
+            color: white;
+            transform: scale(0.95);
         }
 
         .wpm-controls .wpm-value {
             padding: 0 8px;
-            font-weight: 500;
+            font-weight: 600;
+            font-size: 16px;
             color: var(--text-color);
+            min-width: 90px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
         }
 
-        /* Responsive styles */
         @media (max-width: 640px) {
             .theme-toggle {
                 flex-direction: column;
                 align-items: flex-end;
-                gap: 4px;
+                gap: 8px;
             }
 
             .wpm-controls {
                 margin-left: 0;
-                margin-top: 4px;
-                width: 100%;
+                margin-top: 8px;
+                width: calc(100% - 24px);
                 justify-content: space-between;
+                padding: 12px;
+            }
+
+            .wpm-controls button {
+                width: 48px;
+                height: 48px;
+            }
+
+            .wpm-controls button svg {
+                width: 24px;
+                height: 24px;
             }
         }
     </style>
@@ -369,21 +401,40 @@
             </div>
 
             <!-- WPM Controls -->
-            <div class="wpm-controls">
-                <button onclick="updateWPM(state.currentWPM - 25)" title="Decrease WPM">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+            <div class="wpm-controls" style="display: flex; align-items: center; background: var(--surface-color); padding: 10px; border-radius: 12px; margin-top: 8px; width: 100%; justify-content: space-between; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);">
+                <button onclick="updateWPM(state.currentWPM - 25)" class="wpm-button" style="width: 48px; height: 48px; border: none; border-radius: 10px; background: var(--bg-color); color: var(--text-color); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; touch-action: manipulation; -webkit-tap-highlight-color: transparent; position: relative;">
+                    <svg style="width: 24px; height: 24px; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 13l5 5 5-5"/>
                     </svg>
                 </button>
-                <div class="wpm-value">
+                <div style="font-weight: 600; font-size: 16px; color: var(--text-color); min-width: 90px; text-align: center; font-variant-numeric: tabular-nums;">
                     <span id="wpmValueTop">300</span> WPM
                 </div>
-                <button onclick="updateWPM(state.currentWPM + 25)" title="Increase WPM">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                <button onclick="updateWPM(state.currentWPM + 25)" class="wpm-button" style="width: 48px; height: 48px; border: none; border-radius: 10px; background: var(--bg-color); color: var(--text-color); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; touch-action: manipulation; -webkit-tap-highlight-color: transparent; position: relative;">
+                    <svg style="width: 24px; height: 24px; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5 5 5"/>
                     </svg>
                 </button>
             </div>
+
+            <style>
+                .wpm-button:active {
+                    background: var(--primary-color) !important;
+                    color: white !important;
+                    transform: scale(0.95);
+                }
+                
+                @media (max-width: 640px) {
+                    .wpm-button {
+                        width: 52px !important;
+                        height: 52px !important;
+                    }
+                    .wpm-button svg {
+                        width: 28px !important;
+                        height: 28px !important;
+                    }
+                }
+            </style>
         </div>
 
         <!-- Progress Bar -->
