@@ -245,6 +245,60 @@
             opacity: 1;
             transform: translateY(0);
         }
+
+        /* Progress Navigation */
+        .progress-nav {
+            position: fixed;
+            right: 16px;
+            top: 80px;
+            bottom: 80px;
+            width: 40px;
+            background: var(--progress-bg);
+            border-radius: 20px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            cursor: pointer;
+            z-index: 90;
+        }
+
+        .progress-nav:hover,
+        .progress-nav.active {
+            opacity: 1;
+        }
+
+        .progress-nav-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: var(--progress-fill);
+            border-radius: 20px;
+            transition: height 0.1s;
+        }
+
+        .progress-nav-tooltip {
+            position: absolute;
+            right: 48px;
+            background: var(--surface-color);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            white-space: nowrap;
+            transform: translateY(-50%);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .progress-nav-tooltip.visible {
+            opacity: 1;
+        }
+
+        .progress-nav-tooltip .word-preview {
+            font-weight: 500;
+            color: var(--primary-color);
+        }
     </style>
 </head>
 <body>
@@ -291,6 +345,15 @@
         <!-- WPM Indicator -->
         <div class="wpm-indicator" id="wpmIndicator">
             <span id="wpmIndicatorValue">300</span> WPM
+        </div>
+
+        <!-- Progress Navigation -->
+        <div class="progress-nav" id="progressNav">
+            <div class="progress-nav-fill" id="progressNavFill"></div>
+            <div class="progress-nav-tooltip" id="progressNavTooltip">
+                <div>Word <span id="wordNumber">0</span> / <span id="totalWords">0</span></div>
+                <div class="word-preview" id="wordPreview"></div>
+            </div>
         </div>
     </div>
 
@@ -346,6 +409,11 @@
                     updateProgress();
                     initSpeedDial();
                     setupEventListeners();
+                    setupProgressNav();
+                    // Update initial progress nav
+                    document.getElementById('progressNavFill').style.height = 
+                        `${(state.currentIndex / state.words.length) * 100}%`;
+                    document.getElementById('totalWords').textContent = state.words.length;
                 }
             } catch (error) {
                 console.error('Error loading content:', error);
@@ -569,6 +637,69 @@
                 setTheme(button.dataset.theme);
             });
         });
+
+        // Progress Navigation
+        function setupProgressNav() {
+            const progressNav = document.getElementById('progressNav');
+            const tooltip = document.getElementById('progressNavTooltip');
+            let isDragging = false;
+
+            function updateProgressFromPosition(clientY) {
+                const rect = progressNav.getBoundingClientRect();
+                const progress = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+                const wordIndex = Math.floor(progress * state.words.length);
+                updateProgressNavUI(wordIndex);
+            }
+
+            function updateProgressNavUI(wordIndex) {
+                const progress = (wordIndex / state.words.length) * 100;
+                document.getElementById('progressNavFill').style.height = `${progress}%`;
+                document.getElementById('wordNumber').textContent = wordIndex;
+                document.getElementById('totalWords').textContent = state.words.length;
+                document.getElementById('wordPreview').textContent = state.words[wordIndex] || '';
+            }
+
+            progressNav.addEventListener('mouseenter', () => {
+                tooltip.classList.add('visible');
+            });
+
+            progressNav.addEventListener('mouseleave', () => {
+                if (!isDragging) {
+                    tooltip.classList.remove('visible');
+                }
+            });
+
+            progressNav.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                progressNav.classList.add('active');
+                updateProgressFromPosition(e.clientY);
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    updateProgressFromPosition(e.clientY);
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    progressNav.classList.remove('active');
+                    tooltip.classList.remove('visible');
+                    const progress = parseFloat(document.getElementById('progressNavFill').style.height) / 100;
+                    state.currentIndex = Math.floor(progress * state.words.length);
+                    displayNextWord();
+                    saveProgress();
+                }
+            });
+
+            // Toggle word number display with 'N' key
+            document.addEventListener('keydown', (e) => {
+                if (e.key.toLowerCase() === 'n') {
+                    progressNav.style.opacity = progressNav.style.opacity === '1' ? '0' : '1';
+                }
+            });
+        }
 
         // Initialize the reader
         initialize();
