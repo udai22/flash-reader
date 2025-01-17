@@ -4,4 +4,7 @@ PyMuPDF==1.23.8
 Werkzeug==2.0.1
 python-dotenv==1.0.0
 SQLAlchemy==1.4.23
-gunicorn==21.2.0 
+gunicorn==21.2.0
+supabase==1.0.3
+python-jose[cryptography]==3.3.0
+requests==2.31.0
