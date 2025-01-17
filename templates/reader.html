@@ -1,4 +1,14 @@
 <!DOCTYPE html>
+<!-- 
+    Flash Reader - Advanced Reading Interface
+    Features:
+    - Speed reading with adjustable WPM
+    - Context view with infinite scrolling (top and bottom)
+    - Dynamic content loading with buffer management
+    - Theme customization (light/dark/sand)
+    - Progress tracking and chapter navigation
+    - Touch and keyboard controls
+-->
 <html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
@@ -149,13 +159,18 @@
             position: fixed;
             inset: 0;
             background: var(--surface-color);
-            padding: 32px;
-            overflow-y: auto;
+            overflow-y: scroll;
             opacity: 0;
             pointer-events: none;
             transition: all 0.3s ease;
             z-index: 1000;
             transform: translateY(20px);
+            -webkit-overflow-scrolling: touch;
+            height: 100%;
+            width: 100%;
+            overscroll-behavior: contain;
+            touch-action: pan-y;
+            padding-top: 60px; /* Account for fixed header */
         }
 
         .context-view.visible {
@@ -169,13 +184,31 @@
             margin: 0 auto;
             line-height: 1.8;
             font-size: 18px;
-            padding-bottom: 100px;
+            padding: 20px 20px 120px;
             position: relative;
+            min-height: calc(100vh - 60px);
+        }
+
+        .context-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: var(--surface-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 1002;
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid rgba(0,0,0,0.1);
         }
 
         .context-word {
             cursor: pointer;
             padding: 2px 0;
+            display: inline-block;
         }
 
         .context-word:hover {
@@ -188,29 +221,27 @@
             background: var(--progress-bg);
             padding: 2px 4px;
             border-radius: 4px;
+            scroll-margin-top: 100px;
         }
 
         .context-close {
-            position: fixed;
-            top: 16px;
-            right: 16px;
-            padding: 12px;
+            padding: 12px 16px;
             background: var(--surface-color);
             border: none;
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            z-index: 1001;
             cursor: pointer;
             color: var(--text-color);
             display: flex;
             align-items: center;
             gap: 8px;
             font-size: 14px;
+            font-weight: 500;
             transition: all 0.2s ease;
         }
 
-        .context-close:hover {
+        .context-close:active {
             background: var(--button-hover);
+            transform: scale(0.98);
         }
 
         /* Speed Control */
@@ -425,6 +456,178 @@
                 height: 24px;
             }
         }
+
+        /* Context View Styles */
+        .chapter-indicator {
+            display: block;
+            text-align: center;
+            padding: 20px 0;
+            margin: 20px 0;
+            border-top: 1px solid var(--progress-bg);
+            border-bottom: 1px solid var(--progress-bg);
+            color: var(--primary-color);
+            font-weight: 500;
+            background: var(--surface-color);
+            position: sticky;
+            top: 60px;
+            z-index: 1001;
+        }
+
+        .loading-indicator {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: none;
+            align-items: center;
+            gap: 8px;
+            z-index: 1001;
+            transition: all 0.3s ease;
+        }
+
+        .loading-indicator.top {
+            top: 80px;
+        }
+
+        .loading-indicator.bottom {
+            bottom: 20px;
+        }
+
+        .loading-indicator.visible {
+            display: flex;
+        }
+
+        .loading-indicator svg {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .current-position-indicator {
+            position: fixed;
+            right: 16px;
+            bottom: 20px;
+            background: var(--primary-color);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+
+        .current-position-indicator.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .chapters-dropdown {
+            position: relative;
+            margin-right: auto;
+            margin-left: 16px;
+        }
+
+        .chapters-button {
+            padding: 8px 12px;
+            background: var(--surface-color);
+            border: 1px solid var(--progress-bg);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .chapters-button:active {
+            background: var(--button-hover);
+            transform: scale(0.98);
+        }
+
+        .chapters-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 280px;
+            max-height: 60vh;
+            background: var(--surface-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(8px);
+            transition: all 0.2s ease;
+            z-index: 1003;
+            margin-top: 8px;
+            padding: 8px;
+        }
+
+        .chapters-list.visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        .chapter-item {
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-color);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chapter-item:hover {
+            background: var(--progress-bg);
+        }
+
+        .chapter-item.current {
+            background: var(--progress-bg);
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .chapter-progress {
+            font-size: 12px;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .context-undo {
+            padding: 8px 12px;
+            background: var(--surface-color);
+            border: 1px solid var(--progress-bg);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .context-undo:active {
+            background: var(--button-hover);
+            transform: scale(0.98);
+        }
     </style>
 </head>
 <body>
@@ -475,7 +678,71 @@
 
         <!-- Context View -->
         <div class="context-view" id="contextView">
+            <div class="context-header">
+                <div class="context-title">Context View</div>
+                <div class="chapters-dropdown">
+                    <button class="chapters-button" onclick="toggleChaptersList()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                        Chapters
+                    </button>
+                    <div class="chapters-list" id="chaptersList"></div>
+                </div>
+                <div class="context-actions">
+                    <button class="context-undo" onclick="undoLastPosition()" title="Undo last position change">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6M3 10l6-6"/>
+                        </svg>
+                        Undo
+                    </button>
+                    <button class="context-close" onclick="hideContextView()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Close
+                    </button>
+                </div>
+            </div>
             <div class="context-content" id="contextContent"></div>
+            
+            <!-- Loading Indicators -->
+            <div class="loading-indicator" id="loadingIndicatorTop">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" stroke-width="4" stroke-dasharray="30 30">
+                        <animateTransform
+                            attributeName="transform"
+                            attributeType="XML"
+                            type="rotate"
+                            from="0 12 12"
+                            to="360 12 12"
+                            dur="1s"
+                            repeatCount="indefinite"
+                        />
+                    </circle>
+                </svg>
+                Loading previous content...
+            </div>
+            <div class="loading-indicator" id="loadingIndicatorBottom">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" stroke-width="4" stroke-dasharray="30 30">
+                        <animateTransform
+                            attributeName="transform"
+                            attributeType="XML"
+                            type="rotate"
+                            from="0 12 12"
+                            to="360 12 12"
+                            dur="1s"
+                            repeatCount="indefinite"
+                        />
+                    </circle>
+                </svg>
+                Loading more content...
+            </div>
+            
+            <div class="current-position-indicator" id="positionIndicator">
+                Current Reading Position
+            </div>
         </div>
 
         <!-- Speed Control -->
@@ -516,7 +783,22 @@
             isDraggingSpeed: false,
             baseWPM: 300,
             chapter: 1,
-            page: 1
+            page: 1,
+            // Enhanced state properties for infinite scrolling
+            loadedRanges: [],
+            viewportStart: 0,
+            viewportEnd: 0,
+            isLoadingMore: false,
+            lastScrollPosition: 0,
+            chapters: [],
+            minBufferSize: 5000,
+            contextViewActive: false,
+            lastReadingPosition: 0,
+            undoStack: [],
+            bufferSize: 2000,
+            loadThreshold: 500, // pixels from top/bottom to trigger load
+            isLoadingTop: false,
+            isLoadingBottom: false
         };
 
         // Touch handling for speed control
@@ -664,7 +946,18 @@
         function startReading() {
             state.isPlaying = true;
             const interval = calculateInterval(state.currentWPM);
-            state.readingInterval = setInterval(displayNextWord, interval);
+            state.readingInterval = setInterval(() => {
+                if (state.currentIndex >= state.words.length) {
+                    pauseReading();
+                    return;
+                }
+                
+                const wordDisplay = document.getElementById('wordDisplay');
+                wordDisplay.textContent = state.words[state.currentIndex];
+                state.currentIndex++;
+                updateProgress();
+                saveProgress();
+            }, interval);
         }
 
         function pauseReading() {
@@ -754,52 +1047,317 @@
         }
 
         // Context View Functions
-        function showContextView() {
-            const contextView = document.getElementById('contextView');
+        function updateContextViewContent() {
             const contextContent = document.getElementById('contextContent');
+            const observer = setupScrollObserver();
+            let html = '';
+            
+            // Add words with chapter indicators
+            let currentChapter = null;
+            state.words.forEach((word, index) => {
+                // Check for chapter break
+                const chapter = state.chapters.find(c => c.position === index);
+                if (chapter && chapter.title !== currentChapter) {
+                    currentChapter = chapter.title;
+                    html += `<div class="chapter-indicator">${chapter.title}</div>`;
+                }
+                
+                const isCurrentWord = index === state.currentIndex;
+                const className = isCurrentWord ? 'current-word' : 'context-word';
+                html += `<span class="${className}" data-index="${index}">${word}</span> `;
+            });
+            
+            // Add padding for smooth scrolling
+            html += '<div style="height: 60vh"></div>';
+            
+            // Update content
+            contextContent.innerHTML = html;
+            
+            // Observe all words for intersection
+            contextContent.querySelectorAll('.context-word, .current-word').forEach(wordEl => {
+                observer.observe(wordEl);
+                
+                // Add double-click handler
+                wordEl.addEventListener('dblclick', () => {
+                    const index = parseInt(wordEl.dataset.index);
+                    if (!isNaN(index)) {
+                        state.currentIndex = index;
+                        updateAllUI();
+                        showPositionIndicator();
+                    }
+                });
+            });
+        }
+
+        function showPositionIndicator() {
+            const indicator = document.getElementById('positionIndicator');
+            indicator.classList.add('visible');
+            setTimeout(() => {
+                indicator.classList.remove('visible');
+            }, 2000);
+        }
+
+        function showContextView() {
+            if (state.contextViewActive) return;
+            
+            const contextView = document.getElementById('contextView');
             const currentWordIndex = state.currentIndex;
             
-            // Get surrounding text
-            const start = Math.max(0, currentWordIndex - 50);
-            const end = Math.min(state.words.length, currentWordIndex + 50);
-            const contextWords = state.words.slice(start, end);
+            // Set context view as active
+            state.contextViewActive = true;
             
-            // Highlight current word
-            contextWords[currentWordIndex - start] = `<span class="current-word">${contextWords[currentWordIndex - start]}</span>`;
+            // Initialize viewport range
+            state.viewportStart = Math.max(0, currentWordIndex - state.bufferSize);
+            state.viewportEnd = Math.min(state.words.length, currentWordIndex + state.bufferSize);
             
-            contextContent.innerHTML = contextWords.join(' ');
+            // Initial content load
+            loadContent(
+                Math.max(0, currentWordIndex - state.bufferSize),
+                currentWordIndex + state.bufferSize
+            );
+            
+            // Show the context view
             contextView.classList.add('visible');
+            
+            // Center the current word
+            scrollToCurrentWord('auto');
+            
+            // Setup scroll listener
+            setupInfiniteScroll();
         }
 
         function hideContextView() {
+            if (!state.contextViewActive) return;
+            
+            state.contextViewActive = false;
             document.getElementById('contextView').classList.remove('visible');
-        }
-
-        // Touch Handlers
-        function handleTouchStart(e) {
-            if (e.touches.length === 1) {
-                state.holdTimeout = setTimeout(() => {
-                    state.isHolding = true;
-                    showContextView();
-                }, 500);
+            
+            // Ensure we're at the current word position when resuming
+            document.getElementById('wordDisplay').textContent = state.words[state.currentIndex];
+            
+            // Save progress
+            saveProgress();
+            
+            // If we were playing before, resume from new position
+            if (state.isPlaying) {
+                clearInterval(state.readingInterval);
+                startReading();
             }
         }
 
-        function handleTouchEnd() {
-            clearTimeout(state.holdTimeout);
-            if (state.isHolding) {
-                state.isHolding = false;
-                hideContextView();
+        // Infinite Scroll Setup
+        function setupInfiniteScroll() {
+            const contextView = document.getElementById('contextView');
+            let scrollTimeout;
+
+            contextView.addEventListener('scroll', () => {
+                if (scrollTimeout) clearTimeout(scrollTimeout);
+                
+                scrollTimeout = setTimeout(() => {
+                    const scrollTop = contextView.scrollTop;
+                    const clientHeight = contextView.clientHeight;
+                    const scrollHeight = contextView.scrollHeight;
+                    
+                    // Check if near top
+                    if (scrollTop < state.loadThreshold && !state.isLoadingTop) {
+                        loadMoreTop();
+                    }
+                    
+                    // Check if near bottom
+                    if (scrollTop + clientHeight >= scrollHeight - state.loadThreshold && !state.isLoadingBottom) {
+                        loadMoreBottom();
+                    }
+                    
+                    // Update last scroll position
+                    state.lastScrollPosition = scrollTop;
+                }, 100);
+            });
+        }
+
+        // Content Loading Functions
+        async function loadMoreTop() {
+            if (state.isLoadingTop || state.viewportStart <= 0) return;
+            
+            showLoadingIndicator('top');
+            state.isLoadingTop = true;
+            
+            const newStart = Math.max(0, state.viewportStart - state.bufferSize);
+            const newEnd = state.viewportStart;
+            
+            try {
+                await loadContent(newStart, newEnd, 'prepend');
+            } finally {
+                state.isLoadingTop = false;
+                hideLoadingIndicator('top');
+            }
+        }
+
+        async function loadMoreBottom() {
+            if (state.isLoadingBottom || state.viewportEnd >= state.words.length) return;
+            
+            showLoadingIndicator('bottom');
+            state.isLoadingBottom = true;
+            
+            const newStart = state.viewportEnd;
+            const newEnd = Math.min(state.words.length, state.viewportEnd + state.bufferSize);
+            
+            try {
+                await loadContent(newStart, newEnd, 'append');
+            } finally {
+                state.isLoadingBottom = false;
+                hideLoadingIndicator('bottom');
+            }
+        }
+
+        async function loadContent(start, end, position = 'replace') {
+            try {
+                const response = await fetch(`/api/book/{{ book.id }}/content?start=${start}&end=${end}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Remember scroll position
+                    const contextView = document.getElementById('contextView');
+                    const scrollTop = contextView.scrollTop;
+                    const oldHeight = contextView.scrollHeight;
+                    
+                    // Update loaded ranges
+                    state.loadedRanges.push([start, end]);
+                    state.loadedRanges = mergeRanges(state.loadedRanges);
+                    
+                    // Update words array
+                    const newWords = data.content.split(/\s+/).filter(word => word.length > 0);
+                    
+                    // Update viewport range
+                    if (position === 'prepend') {
+                        state.viewportStart = start;
+                    } else if (position === 'append') {
+                        state.viewportEnd = end;
+                    }
+                    
+                    // Render new content
+                    renderWords(newWords, start, position);
+                    
+                    // Maintain scroll position
+                    if (position === 'prepend') {
+                        const newHeight = contextView.scrollHeight;
+                        contextView.scrollTop = scrollTop + (newHeight - oldHeight);
+                    }
+                    
+                    // Update chapters if available
+                    if (data.chapters) {
+                        state.chapters = data.chapters;
+                        updateChaptersList();
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading content:', error);
+            }
+        }
+
+        // Loading Indicator Management
+        function showLoadingIndicator(position) {
+            const indicator = document.getElementById('loadingIndicator');
+            indicator.classList.remove('top', 'bottom');
+            indicator.classList.add(position, 'visible');
+        }
+
+        function hideLoadingIndicator(position) {
+            const indicator = document.getElementById('loadingIndicator');
+            indicator.classList.remove('visible', position);
+        }
+
+        // Word Rendering
+        function renderWords(words, startIndex, position = 'replace') {
+            const contextContent = document.getElementById('contextContent');
+            const fragment = document.createDocumentFragment();
+            
+            words.forEach((word, index) => {
+                const span = createWordSpan(startIndex + index, word);
+                fragment.appendChild(span);
+                fragment.appendChild(document.createTextNode(' '));
+            });
+            
+            if (position === 'replace') {
+                contextContent.innerHTML = '';
+                contextContent.appendChild(fragment);
+            } else if (position === 'prepend') {
+                contextContent.insertBefore(fragment, contextContent.firstChild);
+            } else if (position === 'append') {
+                contextContent.appendChild(fragment);
+            }
+        }
+
+        function createWordSpan(index, word) {
+            const span = document.createElement('span');
+            span.textContent = word;
+            span.className = index === state.currentIndex ? 'current-word' : 'context-word';
+            span.dataset.index = index;
+            
+            // Change back to double-click for better usability
+            span.addEventListener('dblclick', () => {
+                // Remove current-word class from previous word
+                const prevWord = document.querySelector('.current-word');
+                if (prevWord) {
+                    prevWord.className = 'context-word';
+                }
+                
+                // Add current-word class to clicked word
+                span.className = 'current-word';
+                
+                // Push to undo stack and update position
+                pushToUndoStack(state.currentIndex);
+                state.currentIndex = index;
+                updateAllUI();
+                showPositionIndicator();
+                
+                // Scroll the word into view with some padding
+                span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+            
+            return span;
+        }
+
+        // Touch Handling for Context View
+        function handleTouchStart(e) {
+            if (e.touches.length === 1) {
+                state.touchStartTime = Date.now();
+                state.touchStartY = e.touches[0].clientY;
+                state.hasMoved = false;
+                
+                state.holdTimeout = setTimeout(() => {
+                    if (!state.hasMoved) {
+                        if (state.contextViewActive) {
+                            hideContextView();
+                        } else {
+                            showContextView();
+                        }
+                    }
+                }, 500);
             }
         }
 
         function handleTouchMove(e) {
             if (e.touches.length === 1) {
                 const touch = e.touches[0];
-                if (touch.clientX > window.innerWidth * 0.8) {
+                const deltaY = Math.abs(touch.clientY - state.touchStartY);
+                
+                // If user has moved more than 10px, mark as scrolling
+                if (deltaY > 10) {
+                    state.hasMoved = true;
+                    state.isScrolling = true;
+                    clearTimeout(state.holdTimeout);
+                }
+                
+                // Only handle speed control if not scrolling
+                if (!state.isScrolling && touch.clientX > window.innerWidth * 0.8) {
                     showSpeedControl(touch);
                 }
             }
+        }
+
+        function handleTouchEnd() {
+            clearTimeout(state.holdTimeout);
+            // Don't hide context view on touch end anymore
         }
 
         // Theme Management
@@ -943,6 +1501,234 @@
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('wpmValueTop').textContent = state.currentWPM;
         });
+
+        // Add scroll observer
+        function setupScrollObserver() {
+            const options = {
+                root: document.getElementById('contextView'),
+                rootMargin: '1000px',  // Increased margin to load content earlier
+                threshold: 0
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const wordEl = entry.target;
+                        const wordIndex = parseInt(wordEl.dataset.index);
+                        if (!isNaN(wordIndex)) {
+                            // Update viewport range
+                            state.viewportStart = Math.min(state.viewportStart, wordIndex);
+                            state.viewportEnd = Math.max(state.viewportEnd, wordIndex);
+                            
+                            // Load more content when approaching edges
+                            if (!state.isLoadingMore) {
+                                const distanceFromStart = wordIndex - state.viewportStart;
+                                const distanceFromEnd = state.viewportEnd - wordIndex;
+                                
+                                if (distanceFromStart < 1000 || distanceFromEnd < 1000) {
+                                    const loadStart = Math.max(0, state.viewportStart - state.minBufferSize);
+                                    const loadEnd = state.viewportEnd + state.minBufferSize;
+                                    loadMoreContent(loadStart, loadEnd);
+                                }
+                            }
+                        }
+                    }
+                });
+            }, options);
+
+            return observer;
+        }
+
+        async function loadMoreContent(start, end) {
+            if (state.isLoadingMore) return;
+            
+            // Show loading indicator
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            loadingIndicator.classList.add('visible');
+            state.isLoadingMore = true;
+
+            try {
+                const response = await fetch(`/api/book/{{ book.id }}/content?start=${start}&end=${end}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Remember scroll position
+                    const contextView = document.getElementById('contextView');
+                    const scrollTop = contextView.scrollTop;
+                    
+                    // Update loaded ranges
+                    state.loadedRanges.push([start, end]);
+                    state.loadedRanges = mergeRanges(state.loadedRanges);
+                    
+                    // Update words array
+                    const newWords = data.content.split(/\s+/).filter(word => word.length > 0);
+                    
+                    // Extend array if needed
+                    if (start + newWords.length > state.words.length) {
+                        state.words.length = start + newWords.length;
+                    }
+                    
+                    // Insert new words
+                    for (let i = 0; i < newWords.length; i++) {
+                        state.words[start + i] = newWords[i];
+                    }
+                    
+                    // Update chapters if available
+                    if (data.chapters) {
+                        state.chapters = data.chapters;
+                    }
+                    
+                    // Update content and restore scroll position
+                    updateContextViewContent();
+                    contextView.scrollTop = scrollTop;
+                }
+            } catch (error) {
+                console.error('Error loading more content:', error);
+            } finally {
+                state.isLoadingMore = false;
+                loadingIndicator.classList.remove('visible');
+            }
+        }
+
+        function mergeRanges(ranges) {
+            if (ranges.length <= 1) return ranges;
+            
+            ranges.sort((a, b) => a[0] - b[0]);
+            const merged = [ranges[0]];
+            
+            for (const range of ranges.slice(1)) {
+                const last = merged[merged.length - 1];
+                if (range[0] <= last[1] + 1) {
+                    last[1] = Math.max(last[1], range[1]);
+                } else {
+                    merged.push(range);
+                }
+            }
+            
+            return merged;
+        }
+
+        function toggleChaptersList() {
+            const chaptersList = document.getElementById('chaptersList');
+            chaptersList.classList.toggle('visible');
+            
+            // Update chapters list if it's being shown
+            if (chaptersList.classList.contains('visible')) {
+                updateChaptersList();
+            }
+        }
+
+        function updateChaptersList() {
+            const chaptersList = document.getElementById('chaptersList');
+            let html = '';
+            
+            state.chapters.forEach((chapter, index) => {
+                const isCurrent = state.currentIndex >= chapter.position && 
+                    (index === state.chapters.length - 1 || state.currentIndex < state.chapters[index + 1].position);
+                
+                const progress = calculateChapterProgress(chapter, index);
+                
+                html += `
+                    <div class="chapter-item ${isCurrent ? 'current' : ''}" 
+                         onclick="jumpToChapter(${chapter.position})">
+                        <span>${chapter.title}</span>
+                        <span class="chapter-progress">${progress}%</span>
+                    </div>
+                `;
+            });
+            
+            chaptersList.innerHTML = html;
+        }
+
+        function calculateChapterProgress(chapter, index) {
+            const start = chapter.position;
+            const end = index < state.chapters.length - 1 
+                ? state.chapters[index + 1].position 
+                : state.words.length;
+            
+            if (state.currentIndex < start) return 0;
+            if (state.currentIndex >= end) return 100;
+            
+            return Math.round(((state.currentIndex - start) / (end - start)) * 100);
+        }
+
+        function jumpToChapter(position) {
+            state.currentIndex = position;
+            updateAllUI();
+            showPositionIndicator();
+            
+            // Scroll to the new position
+            const contextView = document.getElementById('contextView');
+            const currentWordEl = contextView.querySelector('.current-word');
+            if (currentWordEl) {
+                const headerHeight = 60;
+                const windowHeight = window.innerHeight;
+                const wordTop = currentWordEl.offsetTop;
+                const scrollTop = wordTop - (windowHeight / 2) + headerHeight;
+                contextView.scrollTo({
+                    top: scrollTop,
+                    behavior: 'smooth'
+                });
+            }
+            
+            // Hide chapters list
+            document.getElementById('chaptersList').classList.remove('visible');
+        }
+
+        // Add undo functionality
+        function pushToUndoStack(position) {
+            state.undoStack.push(position);
+            if (state.undoStack.length > 10) { // Keep last 10 positions
+                state.undoStack.shift();
+            }
+        }
+
+        function undoLastPosition() {
+            if (state.undoStack.length > 0) {
+                const lastPosition = state.undoStack.pop();
+                state.currentIndex = lastPosition;
+                updateAllUI();
+                scrollToCurrentWord();
+            }
+        }
+
+        // Improved scroll handling
+        function scrollToCurrentWord(behavior = 'smooth') {
+            const contextView = document.getElementById('contextView');
+            const currentWordEl = contextView.querySelector('.current-word');
+            if (currentWordEl) {
+                const headerHeight = 60;
+                const windowHeight = window.innerHeight;
+                const wordTop = currentWordEl.offsetTop;
+                const scrollTop = wordTop - (windowHeight / 2) + headerHeight;
+                
+                contextView.scrollTo({
+                    top: scrollTop,
+                    behavior: behavior
+                });
+            }
+        }
+
+        // Add undo button to context view
+        document.querySelector('.context-header').innerHTML += `
+            <button class="context-undo" onclick="undoLastPosition()" style="margin-right: 16px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6M3 10l6-6"/>
+                </svg>
+                Undo
+            </button>
+        `;
+
+        // Update word click handler
+        function handleWordClick(wordEl) {
+            const index = parseInt(wordEl.dataset.index);
+            if (!isNaN(index)) {
+                pushToUndoStack(state.currentIndex);  // Save current position for undo
+                state.currentIndex = index;
+                updateAllUI();
+                showPositionIndicator();
+            }
+        }
     </script>
 </body>
 </html> 
