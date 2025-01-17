@@ -303,6 +303,56 @@
                 align-items: flex-end;
             }
         }
+
+        /* WPM Controls Styles */
+        .wpm-controls {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            background: var(--surface-color);
+            padding: 4px;
+            border-radius: 6px;
+            margin-left: 8px;
+        }
+
+        .wpm-controls button {
+            padding: 6px;
+            border: none;
+            border-radius: 4px;
+            background: transparent;
+            color: var(--text-color);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+
+        .wpm-controls button:hover {
+            background: var(--button-hover);
+        }
+
+        .wpm-controls .wpm-value {
+            padding: 0 8px;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        /* Responsive styles */
+        @media (max-width: 640px) {
+            .theme-toggle {
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 4px;
+            }
+
+            .wpm-controls {
+                margin-left: 0;
+                margin-top: 4px;
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
     </style>
 </head>
 <body>
@@ -310,7 +360,7 @@
         <button class="back-button" onclick="window.location.href='/'">← Back</button>
 
         <!-- Theme Toggle and WPM Controls -->
-        <div class="theme-toggle flex items-center gap-4">
+        <div class="theme-toggle">
             <!-- Theme Buttons -->
             <div class="flex gap-1">
                 <button class="theme-button active" data-theme="light">Light</button>
@@ -319,16 +369,16 @@
             </div>
 
             <!-- WPM Controls -->
-            <div class="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg p-1">
-                <button onclick="updateWPM(state.currentWPM - 25)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+            <div class="wpm-controls">
+                <button onclick="updateWPM(state.currentWPM - 25)" title="Decrease WPM">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
                     </svg>
                 </button>
-                <div class="px-2 font-medium">
+                <div class="wpm-value">
                     <span id="wpmValueTop">300</span> WPM
                 </div>
-                <button onclick="updateWPM(state.currentWPM + 25)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                <button onclick="updateWPM(state.currentWPM + 25)" title="Increase WPM">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
                     </svg>
