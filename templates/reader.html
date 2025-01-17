@@ -222,6 +222,29 @@
         .back-button:hover {
             background: white;
         }
+
+        /* WPM Indicator */
+        .wpm-indicator {
+            position: fixed;
+            right: 16px;
+            top: 80px;
+            background: var(--surface-color);
+            color: var(--text-color);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.3s, transform 0.3s;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+        }
+
+        .wpm-indicator.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -263,6 +286,11 @@
             <div class="wpm-display">
                 <span id="wpmValue">300</span> WPM
             </div>
+        </div>
+
+        <!-- WPM Indicator -->
+        <div class="wpm-indicator" id="wpmIndicator">
+            <span id="wpmIndicatorValue">300</span> WPM
         </div>
     </div>
 
@@ -438,9 +466,28 @@
         }
 
         // Speed Control Functions
+        let wpmIndicatorTimeout;
+        
         function updateWPM(newWPM) {
             state.currentWPM = Math.min(Math.max(100, newWPM), 600);
+            
+            // Update all WPM displays
             document.getElementById('wpmValue').textContent = state.currentWPM;
+            document.getElementById('wpmIndicatorValue').textContent = state.currentWPM;
+            
+            // Show the WPM indicator
+            const indicator = document.getElementById('wpmIndicator');
+            indicator.classList.add('visible');
+            
+            // Clear existing timeout if any
+            if (wpmIndicatorTimeout) {
+                clearTimeout(wpmIndicatorTimeout);
+            }
+            
+            // Hide the indicator after 1.5 seconds
+            wpmIndicatorTimeout = setTimeout(() => {
+                indicator.classList.remove('visible');
+            }, 1500);
             
             if (state.isPlaying) {
                 clearInterval(state.readingInterval);
