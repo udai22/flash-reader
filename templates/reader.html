@@ -170,7 +170,6 @@
             width: 100%;
             overscroll-behavior: contain;
             touch-action: pan-y;
-            padding-top: 60px; /* Account for fixed header */
         }
 
         .context-view.visible {
@@ -184,7 +183,7 @@
             margin: 0 auto;
             line-height: 1.8;
             font-size: 18px;
-            padding: 20px 20px 120px;
+            padding: 80px 20px 120px; /* Increased top padding to account for fixed header */
             position: relative;
             min-height: calc(100vh - 60px);
         }
@@ -203,6 +202,7 @@
             z-index: 1002;
             backdrop-filter: blur(8px);
             border-bottom: 1px solid rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
 
         .context-word {
@@ -953,23 +953,12 @@
                 state.readingInterval = null;
             }
             
-            // Capture current state
-            const startIndex = state.currentIndex;
-            const startWord = state.words[startIndex];
-            
             state.isPlaying = true;
             const interval = calculateInterval(state.currentWPM);
             
             // Start from current word
             const wordDisplay = document.getElementById('wordDisplay');
-            wordDisplay.textContent = startWord;
-            
-            // Log for debugging
-            console.log('Starting reading from:', { 
-                startIndex,
-                startWord,
-                wpm: state.currentWPM
-            });
+            wordDisplay.textContent = state.words[state.currentIndex];
             
             // Set up new interval
             state.readingInterval = setInterval(() => {
@@ -1116,6 +1105,12 @@
         function showContextView() {
             if (state.contextViewActive) return;
             
+            // Store reading state
+            const wasPlaying = state.isPlaying;
+            if (wasPlaying) {
+                pauseReading();
+            }
+            
             const contextView = document.getElementById('contextView');
             const currentWordIndex = state.currentIndex;
             
@@ -1136,7 +1131,9 @@
             contextView.classList.add('visible');
             
             // Center the current word
-            scrollToCurrentWord('auto');
+            requestAnimationFrame(() => {
+                scrollToCurrentWord('auto');
+            });
             
             // Setup scroll listener
             setupInfiniteScroll();
@@ -1145,7 +1142,7 @@
         function hideContextView() {
             if (!state.contextViewActive) return;
             
-            // Store reading state
+            // Store reading state and pause if needed
             const wasPlaying = state.isPlaying;
             if (wasPlaying) {
                 pauseReading();
@@ -1153,22 +1150,14 @@
             
             // Capture current state before any changes
             const currentIndex = state.currentIndex;
-            const currentWord = state.words[currentIndex];
             
             // Update view state
             state.contextViewActive = false;
             document.getElementById('contextView').classList.remove('visible');
             
-            // Ensure we're at the correct word
+            // Force synchronization of word display
             const wordDisplay = document.getElementById('wordDisplay');
-            wordDisplay.textContent = currentWord;
-            
-            // Log for debugging
-            console.log('Exiting context view:', { 
-                currentIndex,
-                currentWord,
-                wasPlaying 
-            });
+            wordDisplay.textContent = state.words[currentIndex];
             
             // Update UI synchronously
             updateProgress();
@@ -1179,9 +1168,10 @@
             
             // Resume reading if needed, with guaranteed correct position
             if (wasPlaying) {
-                // Ensure we're at the right position before starting
-                state.currentIndex = currentIndex;
-                startReading();
+                // Small delay to ensure UI is ready
+                requestAnimationFrame(() => {
+                    startReading();
+                });
             }
         }
 
