@@ -62,6 +62,7 @@
             padding: 4px;
             border-radius: 8px;
             z-index: 100;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
         .theme-button {
@@ -294,17 +295,45 @@
             font-weight: 500;
             color: var(--primary-color);
         }
+
+        /* Add responsive styles */
+        @media (max-width: 640px) {
+            .theme-toggle {
+                flex-direction: column;
+                align-items: flex-end;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="reader-container">
         <button class="back-button" onclick="window.location.href='/'">← Back</button>
 
-        <!-- Theme Toggle -->
-        <div class="theme-toggle">
-            <button class="theme-button active" data-theme="light">Light</button>
-            <button class="theme-button" data-theme="dark">Dark</button>
-            <button class="theme-button" data-theme="sand">Sand</button>
+        <!-- Theme Toggle and WPM Controls -->
+        <div class="theme-toggle flex items-center gap-4">
+            <!-- Theme Buttons -->
+            <div class="flex gap-1">
+                <button class="theme-button active" data-theme="light">Light</button>
+                <button class="theme-button" data-theme="dark">Dark</button>
+                <button class="theme-button" data-theme="sand">Sand</button>
+            </div>
+
+            <!-- WPM Controls -->
+            <div class="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg p-1">
+                <button onclick="updateWPM(state.currentWPM - 25)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                    </svg>
+                </button>
+                <div class="px-2 font-medium">
+                    <span id="wpmValueTop">300</span> WPM
+                </div>
+                <button onclick="updateWPM(state.currentWPM + 25)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <!-- Progress Bar -->
@@ -434,6 +463,7 @@
             
             // Update WPM displays
             document.getElementById('wpmValue').textContent = state.currentWPM;
+            document.getElementById('wpmValueTop').textContent = state.currentWPM;
             document.getElementById('wpmIndicatorValue').textContent = state.currentWPM;
         }
 
@@ -569,8 +599,9 @@
         function updateWPM(newWPM) {
             state.currentWPM = Math.min(Math.max(100, newWPM), 600);
             
-            // Update UI
+            // Update all WPM displays
             document.getElementById('wpmValue').textContent = state.currentWPM;
+            document.getElementById('wpmValueTop').textContent = state.currentWPM;
             document.getElementById('wpmIndicatorValue').textContent = state.currentWPM;
             
             // Show the WPM indicator
@@ -784,6 +815,11 @@
         // Add beforeunload event listener
         window.addEventListener('beforeunload', () => {
             saveProgress();
+        });
+
+        // Initialize WPM value in top controls
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('wpmValueTop').textContent = state.currentWPM;
         });
     </script>
 </body>
