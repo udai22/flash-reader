@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 import os
@@ -8,6 +8,10 @@ import fitz  # PyMuPDF
 import json
 import shutil
 import logging
+from auth import auth
+from models import db, User, Book  # Import Book from models
+from config import FLASK_SECRET_KEY
+from functools import wraps
 
 # Get base directory
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -24,6 +28,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.secret_key = FLASK_SECRET_KEY
+
+# Register auth blueprint
+app.register_blueprint(auth, url_prefix='/auth')
+
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(BASE_DIR, "books.db")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads')
@@ -35,29 +44,36 @@ os.makedirs(os.path.join(BASE_DIR, 'outputs'), exist_ok=True)
 os.makedirs(os.path.join(BASE_DIR, 'stitched_content'), exist_ok=True)
 os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
 
-db = SQLAlchemy(app)
+# Initialize SQLAlchemy with app
+db.init_app(app)
 
-class Book(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    author = db.Column(db.String(200))
-    upload_date = db.Column(db.DateTime, default=datetime.utcnow)
-    pdf_path = db.Column(db.String(500), nullable=False)
-    text_path = db.Column(db.String(500))
-    processing_status = db.Column(db.String(50), default='pending')
-    word_count = db.Column(db.Integer)
-    current_position = db.Column(db.Integer, default=0)
+# Initialize database
+with app.app_context():
+    db.create_all()
+    logger.info("Database initialized")
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'title': self.title,
-            'author': self.author,
-            'upload_date': self.upload_date.strftime('%Y-%m-%d %H:%M:%S'),
-            'processing_status': self.processing_status,
-            'word_count': self.word_count,
-            'current_position': self.current_position
-        }
+@app.after_request
+def add_security_headers(response):
+    """Add security headers including CSP"""
+    # Add CSP header with more permissive but still secure settings
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; "  # Allow Tailwind and necessary JS
+        "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; "  # Allow Tailwind CSS
+        "img-src 'self' data: blob:; "  # Allow data URLs for images
+        "font-src 'self' data: https://cdn.tailwindcss.com; "  # Allow fonts
+        "connect-src 'self' https://cdn.tailwindcss.com; "  # Allow connections to Tailwind
+        "worker-src 'self' blob:; "  # Allow web workers
+        "frame-src 'self'; "  # Allow iframes from same origin
+        "object-src 'none'; "  # Disable object/embed tags
+        "base-uri 'self'"  # Restrict base URI
+    )
+    # Add other security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
 
 def process_pdf(book_id):
     """Process the PDF and create the text version"""
@@ -177,15 +193,21 @@ def process_pdf(book_id):
         return False
 
 def get_default_books():
-    """Get or create the default books"""
+    """Get or create the default books for the current user"""
+    user_id = session.get('user_id')
+    if not user_id:
+        return []
+
     # Create directories if they don't exist
     os.makedirs(os.path.join(BASE_DIR, 'stitched_content'), exist_ok=True)
     os.makedirs(os.path.join(BASE_DIR, 'outputs'), exist_ok=True)
     
-    # Create welcome book if it doesn't exist
-    welcome_book = Book.query.filter_by(title='Welcome to Flash Reader').first()
+    default_books = []
+    
+    # Create welcome book if it doesn't exist for this user
+    welcome_book = Book.query.filter_by(title='Welcome to Flash Reader', user_id=user_id).first()
     if not welcome_book:
-        default_path = os.path.join(BASE_DIR, 'stitched_content', 'welcome.txt')
+        default_path = os.path.join(BASE_DIR, 'stitched_content', f'welcome_{user_id}.txt')
         default_content = """Welcome to Flash Reader!
 
 This is a modern web-based speed reading application that helps you read faster and more efficiently. You can:
@@ -212,14 +234,17 @@ Enjoy reading at your own pace!"""
             text_path=default_path,
             pdf_path='',  # No PDF for default book
             processing_status='completed',
-            word_count=word_count
+            word_count=word_count,
+            user_id=user_id
         )
         db.session.add(welcome_book)
         db.session.commit()
-        logger.info("Created welcome book entry")
+        logger.info(f"Created welcome book entry for user {user_id}")
+    
+    default_books.append(welcome_book)
 
-    # Create Philosophia Ultima book if it doesn't exist
-    philosophia_book = Book.query.filter_by(title='Philosophia Ultima').first()
+    # Create Philosophia Ultima book if it doesn't exist for this user
+    philosophia_book = Book.query.filter_by(title='Philosophia Ultima', user_id=user_id).first()
     if not philosophia_book:
         # First check in outputs directory, then in data directory
         json_path = os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json')
@@ -231,7 +256,7 @@ Enjoy reading at your own pace!"""
                 shutil.copy2(json_path, os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json'))
                 json_path = os.path.join(BASE_DIR, 'outputs', 'Philosophia_Ultima.json')
         
-        text_path = os.path.join(BASE_DIR, 'stitched_content', 'Philosophia_Ultima.txt')
+        text_path = os.path.join(BASE_DIR, 'stitched_content', f'Philosophia_Ultima_{user_id}.txt')
         
         # Process the JSON file using ContentStitcher
         if os.path.exists(json_path):
@@ -249,22 +274,79 @@ Enjoy reading at your own pace!"""
                     text_path=text_path,
                     pdf_path='',  # No PDF path needed
                     processing_status='completed',
-                    word_count=word_count
+                    word_count=word_count,
+                    user_id=user_id
                 )
                 db.session.add(philosophia_book)
                 db.session.commit()
-                logger.info("Created Philosophia Ultima book entry")
+                logger.info(f"Created Philosophia Ultima book entry for user {user_id}")
+    
+    if philosophia_book:
+        default_books.append(philosophia_book)
 
-    return [welcome_book, philosophia_book] if philosophia_book else [welcome_book]
+    # Create Cycles book if it doesn't exist for this user
+    cycles_book = Book.query.filter_by(title='Cycles—The Science of Prediction', user_id=user_id).first()
+    if not cycles_book:
+        cycles_path = os.path.join(BASE_DIR, 'stitched_content', 'Cycles—The Science of Prediction, Edward R. Dewey.txt')
+        if os.path.exists(cycles_path):
+            # Create a user-specific copy
+            user_cycles_path = os.path.join(BASE_DIR, 'stitched_content', f'Cycles_{user_id}.txt')
+            shutil.copy2(cycles_path, user_cycles_path)
+            
+            with open(user_cycles_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                word_count = len(content.split())
+            
+            cycles_book = Book(
+                title='Cycles—The Science of Prediction',
+                author='Edward R. Dewey',
+                text_path=user_cycles_path,
+                pdf_path='',  # No PDF path needed
+                processing_status='completed',
+                word_count=word_count,
+                user_id=user_id
+            )
+            db.session.add(cycles_book)
+            db.session.commit()
+            logger.info(f"Created Cycles book entry for user {user_id}")
+    
+    if cycles_book:
+        default_books.append(cycles_book)
+
+    return default_books
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/')
 def index():
-    # Ensure default books exist
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    # Get books for the current user
+    user_id = session['user_id']
     default_books = get_default_books()
-    books = Book.query.order_by(Book.upload_date.desc()).all()
+    books = Book.query.filter_by(user_id=user_id).order_by(Book.upload_date.desc()).all()
     return render_template('index.html', books=books)
 
+@app.route('/login')
+def login():
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+@app.route('/register')
+def register():
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+    return render_template('register.html')
+
 @app.route('/upload', methods=['POST'])
+@login_required
 def upload_file():
     if 'file' not in request.files:
         logger.error("No file part in request")
@@ -280,9 +362,15 @@ def upload_file():
         return jsonify({'error': 'File must be a PDF'}), 400
 
     try:
-        # Save PDF file
+        user_id = session['user_id']
+        
+        # Create user-specific upload directory
+        user_upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(user_id))
+        os.makedirs(user_upload_dir, exist_ok=True)
+        
+        # Save PDF file in user's directory
         filename = secure_filename(file.filename)
-        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        pdf_path = os.path.join(user_upload_dir, filename)
         logger.info(f"Saving uploaded file to: {pdf_path}")
         file.save(pdf_path)
 
@@ -290,11 +378,12 @@ def upload_file():
         book = Book(
             title=os.path.splitext(filename)[0],
             pdf_path=pdf_path,
-            processing_status='pending'
+            processing_status='pending',
+            user_id=user_id
         )
         db.session.add(book)
         db.session.commit()
-        logger.info(f"Created book record with id: {book.id}")
+        logger.info(f"Created book record with id: {book.id} for user {user_id}")
 
         # Process PDF
         logger.info(f"Starting PDF processing for book id: {book.id}")
@@ -310,6 +399,7 @@ def upload_file():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/book/<int:book_id>')
+@login_required
 def view_book(book_id):
     book = Book.query.get_or_404(book_id)
     return render_template('reader.html', book=book)
@@ -356,11 +446,6 @@ def get_processing_status(book_id):
         'status': book.processing_status,
         'word_count': book.word_count
     })
-
-# Initialize database on startup
-with app.app_context():
-    db.create_all()
-    logger.info("Database initialized")
 
 if __name__ == '__main__':
     # Create required directories if they don't exist

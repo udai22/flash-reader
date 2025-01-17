@@ -1,77 +1,108 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Reader & Flash Reader</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <h1 class="text-4xl font-bold mb-8 text-center text-gray-800">PDF Reader & Flash Reader</h1>
-        
-        <!-- Upload Section -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 class="text-2xl font-semibold mb-4">Upload PDF</h2>
-            <form id="uploadForm" class="space-y-4">
-                <div class="flex items-center justify-center w-full">
-                    <label class="flex flex-col w-full h-32 border-4 border-dashed hover:bg-gray-100 hover:border-gray-300">
-                        <div class="flex flex-col items-center justify-center pt-7">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-gray-400 group-hover:text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
-                            </svg>
-                            <p class="pt-1 text-sm tracking-wider text-gray-400 group-hover:text-gray-600">
-                                Select a PDF file
-                            </p>
-                        </div>
-                        <input type="file" class="opacity-0" accept=".pdf" id="pdfFile" />
-                    </label>
+<body class="bg-gray-100">
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold">Flash Reader</h1>
                 </div>
-                <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition duration-200">
-                    Upload PDF
-                </button>
-            </form>
-        </div>
-
-        <!-- Books List -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-2xl font-semibold mb-4">Your Books</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {% for book in books %}
-                <div class="border rounded-lg p-4 hover:shadow-lg transition duration-200">
-                    <h3 class="text-xl font-semibold mb-2">{{ book.title }}</h3>
-                    <p class="text-gray-600 mb-2">Uploaded: {{ book.upload_date }}</p>
-                    <p class="text-gray-600 mb-2">Status: 
-                        <span class="
-                            {% if book.processing_status == 'completed' %}text-green-500
-                            {% elif book.processing_status == 'failed' %}text-red-500
-                            {% else %}text-yellow-500{% endif %}
-                        ">
-                            {{ book.processing_status }}
-                        </span>
-                    </p>
-                    {% if book.processing_status == 'completed' %}
-                    <p class="text-gray-600 mb-4">Words: {{ book.word_count }}</p>
-                    <a href="{{ url_for('view_book', book_id=book.id) }}" 
-                       class="inline-block bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition duration-200">
-                        Read Book
-                    </a>
+                <div class="flex items-center">
+                    {% if session.get('user_id') %}
+                        <button onclick="logout()" class="ml-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                            Logout
+                        </button>
+                    {% else %}
+                        <a href="{{ url_for('login') }}" class="ml-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                            Login
+                        </a>
+                        <a href="{{ url_for('register') }}" class="ml-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                            Register
+                        </a>
                     {% endif %}
                 </div>
-                {% endfor %}
             </div>
         </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% if session.get('user_id') %}
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-xl font-bold mb-4">Upload PDF</h2>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center" id="dropZone">
+                    <div class="flex flex-col items-center">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <p class="mt-1 text-sm text-gray-600">Select a PDF file</p>
+                    </div>
+                    <input type="file" id="fileInput" accept=".pdf" class="hidden">
+                </div>
+                <button id="uploadBtn" class="mt-4 w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Upload PDF
+                </button>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold mb-4">Your Books</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for book in books %}
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-bold">{{ book.title }}</h3>
+                        <p class="text-sm text-gray-600">Uploaded: {{ book.upload_date }}</p>
+                        <p class="text-sm text-gray-600">Status: <span class="text-green-600">{{ book.processing_status }}</span></p>
+                        <p class="text-sm text-gray-600">Words: {{ book.word_count }}</p>
+                        <a href="/book/{{ book.id }}" class="mt-2 inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            Read Book
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
     </div>
 
     <script>
-        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+
+        // Handle drag and drop
+        dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
-            
-            const fileInput = document.getElementById('pdfFile');
+            dropZone.classList.add('border-indigo-500');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-indigo-500');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-indigo-500');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'application/pdf') {
+                fileInput.files = e.dataTransfer.files;
+            }
+        });
+
+        // Handle click to select file
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Handle file upload
+        uploadBtn.addEventListener('click', async () => {
             const file = fileInput.files[0];
-            
             if (!file) {
-                alert('Please select a file');
+                alert('Please select a PDF file');
                 return;
             }
 
@@ -84,18 +115,35 @@
                     body: formData
                 });
 
-                const result = await response.json();
+                const data = await response.json();
                 
                 if (response.ok) {
-                    alert('File uploaded successfully!');
+                    alert('File uploaded successfully');
                     location.reload();
                 } else {
-                    alert(result.error || 'Upload failed');
+                    alert(data.error || 'Upload failed');
                 }
             } catch (error) {
-                alert('Upload failed: ' + error.message);
+                alert('An error occurred during upload');
             }
         });
+
+        // Handle logout
+        async function logout() {
+            try {
+                const response = await fetch('/auth/logout', {
+                    method: 'POST',
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    alert('Logout failed');
+                }
+            } catch (error) {
+                alert('An error occurred during logout');
+            }
+        }
     </script>
 </body>
 </html> 
