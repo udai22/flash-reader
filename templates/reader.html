@@ -494,6 +494,7 @@ const state = {
   // Context
   contextViewActive: false,
   wasPlayingBeforeContext: false,
+  initialScrollDone: false,
 
   // Throttle saving
   saveTimeout: null,
@@ -970,8 +971,9 @@ function showContextView() {
 
   // Set active state first
   state.contextViewActive = true;
+  state.initialScrollDone = false;
   
-  // Ensure chunks are ready (measured or estimated)
+  // Ensure chunks are ready
   if (!state.chunksMeasured) {
     measureAllChunks();
   }
@@ -979,7 +981,19 @@ function showContextView() {
   const cv = document.getElementById('contextView');
   const content = document.getElementById('contextContent');
 
-  // Set initial styles for smooth transition
+  // Calculate current chunk and viewport
+  const currentChunkIndex = Math.floor(state.currentIndex / state.chunkSize);
+  const viewportChunks = 5; // Show 5 chunks total (2 before, current, 2 after)
+  const startChunk = Math.max(0, currentChunkIndex - Math.floor(viewportChunks/2));
+  const endChunk = Math.min(state.chunkedData.length, startChunk + viewportChunks);
+
+  // Calculate initial scroll position
+  let heightBeforeTarget = 0;
+  for (let i = 0; i < currentChunkIndex; i++) {
+    heightBeforeTarget += state.chunkedData[i].exactHeight;
+  }
+  
+  // Set initial styles
   cv.style.display = 'block';
   content.style.cssText = `
     padding: 0 20px;
@@ -987,15 +1001,36 @@ function showContextView() {
     max-width: 800px;
     margin: 0 auto;
     line-height: 1.6;
+    height: calc(100vh - 60px);
+    overflow-y: auto;
   `;
 
-  // Show the view and render content
+  // Render initial chunks
+  let topPadding = 0;
+  for (let i = 0; i < startChunk; i++) {
+    topPadding += state.chunkedData[i].exactHeight;
+  }
+  
+  let bottomPadding = 0;
+  for (let i = endChunk; i < state.chunkedData.length; i++) {
+    bottomPadding += state.chunkedData[i].exactHeight;
+  }
+
+  const initialChunks = state.chunkedData.slice(startChunk, endChunk);
+  renderChunks(initialChunks, topPadding, bottomPadding);
+
+  // Show view and scroll to position
   requestAnimationFrame(() => {
     cv.classList.add('visible');
-    renderVisibleChunks();
     
-    // Scroll to current word after render
+    // Set initial scroll position
+    const offset = state.chunkedData[currentChunkIndex].exactHeight * 
+      ((state.currentIndex - state.chunkedData[currentChunkIndex].startIndex) / state.chunkSize);
+    content.scrollTop = heightBeforeTarget + offset - (content.clientHeight / 2);
+    
+    // After initial scroll, mark as done and highlight current word
     requestAnimationFrame(() => {
+      state.initialScrollDone = true;
       scrollCurrentWordIntoView(false);
     });
   });
@@ -1059,50 +1094,110 @@ function onContextScroll() {
 }
 
 function renderVisibleChunks() {
+  if (!state.contextViewActive) return;
+  
   console.log('[renderVisibleChunks] Start...');
   const container = document.getElementById('contextContent');
   const scrollTop = container.scrollTop;
   const viewHeight = container.clientHeight;
 
-  // Determine which chunk is at top
+  // Find current chunk
+  const currentChunkIndex = Math.floor(state.currentIndex / state.chunkSize);
+  
+  // If this is initial render, use the current chunk as anchor
+  if (!state.initialScrollDone) {
+    const viewportChunks = 5;
+    const startChunk = Math.max(0, currentChunkIndex - Math.floor(viewportChunks/2));
+    const endChunk = Math.min(state.chunkedData.length, startChunk + viewportChunks);
+    
+    let topPadding = 0;
+    for (let i = 0; i < startChunk; i++) {
+      topPadding += state.chunkedData[i].exactHeight;
+    }
+    
+    let bottomPadding = 0;
+    for (let i = endChunk; i < state.chunkedData.length; i++) {
+      bottomPadding += state.chunkedData[i].exactHeight;
+    }
+    
+    const chunks = state.chunkedData.slice(startChunk, endChunk);
+    renderChunks(chunks, topPadding, bottomPadding);
+    return;
+  }
+
+  // For normal scrolling, determine visible range based on scroll position
   let startIndexChunk = 0;
   let accumulated = 0;
+  
+  // Find first visible chunk
   for (let i = 0; i < state.chunkedData.length; i++) {
-    const cData = state.chunkedData[i];
-    if (accumulated + cData.exactHeight > scrollTop) {
-      startIndexChunk = i;
+    if (accumulated > scrollTop - viewHeight) {
+      startIndexChunk = Math.max(0, i - 1); // Add one chunk buffer
       break;
     }
-    accumulated += cData.exactHeight;
+    accumulated += state.chunkedData[i].exactHeight;
   }
 
-  // Collect visible chunks
+  // Collect visible chunks plus buffer
   const visibleChunks = [];
   let usedHeight = 0;
-  let j = startIndexChunk;
-  while (j < state.chunkedData.length && usedHeight < viewHeight * 1.5) {
-    visibleChunks.push(state.chunkedData[j]);
-    usedHeight += state.chunkedData[j].exactHeight;
-    j++;
+  let i = startIndexChunk;
+  
+  // Keep rendering chunks until we have enough height plus one chunk buffer
+  while (i < state.chunkedData.length && 
+         (usedHeight < viewHeight * 1.5 || i === currentChunkIndex)) {
+    visibleChunks.push(state.chunkedData[i]);
+    usedHeight += state.chunkedData[i].exactHeight;
+    i++;
   }
 
-  state.topPadding = accumulated;
-  let bottomAccum = 0;
-  for (let k = j; k < state.chunkedData.length; k++) {
-    bottomAccum += state.chunkedData[k].exactHeight;
+  // Always include the chunk with current word if nearby
+  if (!visibleChunks.some(c => c.startIndex <= state.currentIndex && c.endIndex > state.currentIndex)) {
+    const distance = Math.abs(currentChunkIndex - startIndexChunk);
+    if (distance <= 2) { // Only include if within 2 chunks
+      visibleChunks.push(state.chunkedData[currentChunkIndex]);
+      visibleChunks.sort((a, b) => a.startIndex - b.startIndex);
+    }
   }
-  state.bottomPadding = bottomAccum;
 
-  console.log(`[renderVisibleChunks] startIndexChunk=${startIndexChunk}, visibleChunks=${visibleChunks.length}, topPadding=${state.topPadding}, bottomPadding=${state.bottomPadding}`);
+  // Calculate paddings
+  let topPadding = 0;
+  for (let j = 0; j < startIndexChunk; j++) {
+    topPadding += state.chunkedData[j].exactHeight;
+  }
+  
+  let bottomPadding = 0;
+  for (let j = i; j < state.chunkedData.length; j++) {
+    bottomPadding += state.chunkedData[j].exactHeight;
+  }
+
+  // Save scroll position
+  const oldHeight = container.scrollHeight;
+  const oldScroll = container.scrollTop;
+  const oldClientHeight = container.clientHeight;
+
+  // Render chunks
+  renderChunks(visibleChunks, topPadding, bottomPadding);
+
+  // Restore scroll position accounting for height changes
+  if (oldHeight !== container.scrollHeight) {
+    const ratio = oldScroll / (oldHeight - oldClientHeight);
+    const newMax = container.scrollHeight - container.clientHeight;
+    container.scrollTop = ratio * newMax;
+  }
+}
+
+// Helper function to render chunks with given paddings
+function renderChunks(chunks, topPadding, bottomPadding) {
+  console.log(`[renderVisibleChunks] chunks=${chunks.length}, topPadding=${topPadding}, bottomPadding=${bottomPadding}`);
 
   let finalHTML = '';
-  for (let i = 0; i < visibleChunks.length; i++) {
-    const chunk = visibleChunks[i];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
     const highlight = (
       state.currentIndex >= chunk.startIndex && state.currentIndex < chunk.endIndex
     );
 
-    // Rebuild chunk HTML so we highlight the current word if it's in range
     chunk.html = buildChunkHTML(
       state.words.slice(chunk.startIndex, chunk.endIndex),
       chunk.startIndex,
@@ -1112,8 +1207,8 @@ function renderVisibleChunks() {
   }
 
   document.getElementById('chunksContainer').innerHTML = finalHTML;
-  document.getElementById('topSpacer').style.height = state.topPadding + 'px';
-  document.getElementById('bottomSpacer').style.height = state.bottomPadding + 'px';
+  document.getElementById('topSpacer').style.height = topPadding + 'px';
+  document.getElementById('bottomSpacer').style.height = bottomPadding + 'px';
 
   console.log('[renderVisibleChunks] Render complete.');
 }
@@ -1121,13 +1216,55 @@ function renderVisibleChunks() {
 function scrollCurrentWordIntoView(smooth) {
   const doSmooth = (typeof smooth === 'boolean') ? smooth : true;
   console.log(`[scrollCurrentWordIntoView] Called with smooth=${doSmooth}`);
+
+  // First ensure the chunk containing current word is rendered
+  const currentChunkIndex = Math.floor(state.currentIndex / state.chunkSize);
+  const container = document.getElementById('contextContent');
+  
   requestAnimationFrame(() => {
-    const currentEl = document.querySelector('.current-word');
+    let currentEl = document.querySelector('.current-word');
+    
+    // If current word not found, try to render its chunk first
+    if (!currentEl) {
+      console.log('[scrollCurrentWordIntoView] Current word not found, rendering its chunk...');
+      
+      const startChunk = Math.max(0, currentChunkIndex - 1);
+      const endChunk = Math.min(state.chunkedData.length, currentChunkIndex + 2);
+      
+      let topPadding = 0;
+      for (let i = 0; i < startChunk; i++) {
+        topPadding += state.chunkedData[i].exactHeight;
+      }
+      
+      let bottomPadding = 0;
+      for (let i = endChunk; i < state.chunkedData.length; i++) {
+        bottomPadding += state.chunkedData[i].exactHeight;
+      }
+      
+      const chunks = state.chunkedData.slice(startChunk, endChunk);
+      renderChunks(chunks, topPadding, bottomPadding);
+      
+      // Try to find current word again
+      currentEl = document.querySelector('.current-word');
+    }
+    
     if (currentEl) {
-      currentEl.scrollIntoView({
-        block: 'center',
+      // Get the element's position relative to the container
+      const elementRect = currentEl.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      
+      // Calculate where we want the element to be
+      const targetFromTop = (containerRect.height - elementRect.height) / 2;
+      
+      // Calculate the scroll adjustment needed
+      const adjustment = elementRect.top - containerRect.top - targetFromTop;
+      
+      // Smoothly scroll to center the element
+      container.scrollBy({
+        top: adjustment,
         behavior: doSmooth ? 'smooth' : 'auto'
       });
+      
       console.log('[scrollCurrentWordIntoView] Scrolled current word into view.');
     } else {
       console.log('[scrollCurrentWordIntoView] No .current-word found.');
@@ -1359,16 +1496,27 @@ function setupProgressNav() {
 
 function updateProgressNav() {
   if (state.words.length < 2) return;
+  
+  const fill = document.getElementById('progressNavFill');
+  const wordNumber = document.getElementById('wordNumber');
+  const totalWords = document.getElementById('totalWords');
+  const wordPreview = document.getElementById('wordPreview');
+  
+  // Guard against any null elements
+  if (!fill || !wordNumber || !totalWords || !wordPreview) {
+    console.warn('[updateProgressNav] Some elements not found. Skipping update.');
+    return;
+  }
+
   const ratio = state.currentIndex / (state.words.length - 1);
   const pct = ratio * 100;
-  document.getElementById('progressNavFill').style.height = pct + '%';
+  fill.style.height = pct + '%';
 
-  document.getElementById('wordNumber').textContent = (state.currentIndex + 1).toString();
-  document.getElementById('totalWords').textContent = state.words.length.toString();
-  document.getElementById('wordPreview').textContent =
-    state.words[state.currentIndex] || '';
-  // console.log(`[updateProgressNav] Updated fill to ${pct}%`);
+  wordNumber.textContent = (state.currentIndex + 1).toString();
+  totalWords.textContent = state.words.length.toString();
+  wordPreview.textContent = state.words[state.currentIndex] || '';
 }
 </script>
 </body>
 </html>
+
