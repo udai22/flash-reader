@@ -1036,55 +1036,40 @@
       const container = document.getElementById('contextContent');
       container.innerHTML = ''; // clear
 
-      let frag = document.createDocumentFragment();
-      let currentChapter = null;
-
-      state.words.forEach((word, idx) => {
-        // If a new chapter starts here, show a chapter indicator
+      // We'll build up simple HTML with data attributes, but NOT attach click listeners to each span:
+      let html = '';
+      let currentChapterTitle = null;
+      for (let idx = 0; idx < state.words.length; idx++) {
+        // Insert chapter markers:
         const chapObj = state.chapters.find((c) => c.position === idx);
-        if (chapObj && chapObj.title !== currentChapter) {
-          currentChapter = chapObj.title;
-          let ci = document.createElement('div');
-          ci.className = 'chapter-indicator';
-          ci.textContent = chapObj.title;
-          frag.appendChild(ci);
+        if (chapObj && chapObj.title !== currentChapterTitle) {
+          currentChapterTitle = chapObj.title;
+          html += `<div class="chapter-indicator">${chapObj.title}</div>`;
         }
-
-        // Create the span
-        let span = document.createElement('span');
-        span.textContent = word;
-        span.className = idx === state.currentIndex ? 'current-word' : 'context-word';
-        span.dataset.index = idx;
-
-        // Clicking a word jumps to it
-        span.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleContextWordClick(idx);
-        });
-
-        frag.appendChild(span);
-        frag.appendChild(document.createTextNode(' '));
-      });
-
-      container.appendChild(frag);
+        const cls = (idx === state.currentIndex) ? 'current-word' : 'context-word';
+        html += `<span class="${cls}" data-index="${idx}">${state.words[idx]}</span> `;
+      }
+      container.innerHTML = html;
     }
 
-    function handleContextWordClick(wordIndex) {
-      pushToUndoStack(state.currentIndex);
-      state.currentIndex = wordIndex;
+    // We attach this once, outside the big loop
+    document.getElementById('contextContent').addEventListener('click', (e) => {
+      // If user clicked the container itself, ignore
+      if (!e.target.classList.contains('context-word') &&
+          !e.target.classList.contains('current-word')) {
+        return;
+      }
 
-      // Re-render the context so highlight moves
-      generateContextHTML();
-      scrollCurrentWordIntoView();
-
-      // Update single-word display
-      document.getElementById('wordDisplay').textContent = state.words[wordIndex];
-      updateProgress();
-      updateProgressNav();
-      saveProgress();
-      showPositionIndicator();
-    }
+      // We have clicked on a word
+      const index = parseInt(e.target.dataset.index, 10);
+      if (!isNaN(index)) {
+        pushToUndoStack(state.currentIndex);
+        state.currentIndex = index;
+        updateAllUI();       // refresh single-word display & progress
+        generateContextHTML();  // re-highlight in context
+        scrollCurrentWordIntoView();
+      }
+    });
 
     function showPositionIndicator() {
       // Quick little pop-up near the bottom (or any style you want)
