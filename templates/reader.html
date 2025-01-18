@@ -1,21 +1,12 @@
 <!DOCTYPE html>
-<!--
-    Improved High-Performance Flash Reader
-    - Tokenization with punctuation
-    - Virtual scrolling in context view
-    - Additional shortcuts (arrow left/right, page up/down)
-    - Caching context view
-    - Mobile-friendly fixed overlay (no messing with body overflow)
--->
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{ book.title }} - Flash Reader</title>
+  <title>{{ book.title }} - Overhauled Flash Reader</title>
+
   <style>
-    /* -----------------------------------------------------------
-       THEME VARIABLES
-       ----------------------------------------------------------- */
+    /* ====================== THEME VARIABLES ======================= */
     html[data-theme="light"] {
       --primary-color: #2563eb;
       --text-color: #1f2937;
@@ -47,21 +38,40 @@
       --button-hover: #fff8f0;
     }
 
+    /* ====================== GLOBAL RESET ======================= */
     body {
       margin: 0;
-      padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg-color);
       color: var(--text-color);
       height: 100vh;
       width: 100vw;
+      /* Lock background scroll, so only the context overlay can scroll: */
+      overflow: hidden;
       transition: background-color 0.3s, color 0.3s;
-      overflow: hidden; /* We'll keep the main body pinned, the context is a fixed overlay. */
     }
 
-    /* -----------------------------------------------------------
-       THEME TOGGLE & WPM CONTROLS
-       ----------------------------------------------------------- */
+    .reader-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ====================== BACK BUTTON ======================= */
+    .back-button {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      padding: 8px 16px;
+      background: var(--button-bg);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      z-index: 100;
+    }
+
+    /* ============== THEME & WPM CONTROLS ============== */
     .theme-toggle {
       position: fixed;
       right: 16px;
@@ -77,7 +87,7 @@
       background: var(--button-bg);
       padding: 4px;
       border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .theme-button {
       padding: 8px 12px;
@@ -87,7 +97,6 @@
       color: var(--text-color);
       cursor: pointer;
       font-size: 14px;
-      transition: background-color 0.2s;
     }
     .theme-button.active {
       background: var(--primary-color);
@@ -101,10 +110,10 @@
       background: var(--button-bg);
       padding: 8px 12px;
       border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .wpm-controls button {
       width: 44px;
@@ -114,57 +123,31 @@
       background: var(--bg-color);
       color: var(--text-color);
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-      position: relative;
-      padding: 0;
     }
-    .wpm-controls button svg {
-      width: 20px;
-      height: 20px;
-      stroke-width: 2.5;
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-    }
-    .wpm-controls button:active {
-      background: var(--primary-color);
-      color: #fff;
-      transform: scale(0.95);
-    }
-    .wpm-controls .wpm-value {
-      padding: 0 8px;
-      font-weight: 600;
+    .wpm-value {
       font-size: 16px;
-      color: var(--text-color);
-      min-width: 90px;
+      font-weight: 600;
+      min-width: 70px;
       text-align: center;
-      font-variant-numeric: tabular-nums;
     }
 
     .context-mode-button {
-      margin-top: 8px;
       width: 100%;
       padding: 8px 12px;
       background: var(--button-bg);
       border: 1px solid var(--progress-bg);
       border-radius: 8px;
-      color: var(--text-color);
       font-size: 14px;
-      font-weight: 500;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 6px;
       cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-    .context-mode-button:hover {
-      background: var(--button-hover);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+
+      pointer-events: none; /* disabled until data is loaded */
+      opacity: 0.5;        /* visually dimmed */
+      transition: opacity 0.2s, pointer-events 0.2s;
     }
     .context-mode-button.active {
       background: var(--primary-color);
@@ -172,52 +155,34 @@
       border-color: var(--primary-color);
     }
 
-    /* -----------------------------------------------------------
-       READER CONTAINER
-       ----------------------------------------------------------- */
-    .reader-container {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    /* BACK BUTTON */
-    .back-button {
-      position: fixed;
-      left: 16px;
-      top: 16px;
-      padding: 8px 16px;
-      background: rgba(255, 255, 255, 0.9);
-      border: none;
-      border-radius: 8px;
+    /* ============== SINGLE-WORD READER ============== */
+    .word-boundary {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 12px;
+      background: var(--bg-color);
+      padding: 40px;
+      text-align: center;
       cursor: pointer;
-      font-size: 14px;
-      color: var(--text-color);
-      z-index: 100;
+      user-select: none;
     }
-    .back-button:hover {
-      background: #fff;
+    .word-display {
+      font-size: 36px;
+      font-weight: 500;
     }
 
-    /* -----------------------------------------------------------
-       PROGRESS BAR (LEFT)
-       ----------------------------------------------------------- */
+    /* ============= PROGRESS BAR & INFO ============= */
     .progress-bar {
       position: fixed;
-      left: 0;
-      top: 0;
-      bottom: 0;
+      left: 0; top: 0; bottom: 0;
       width: 4px;
       background: var(--progress-bg);
       opacity: 0;
       transition: opacity 0.3s;
     }
-    .progress-bar.visible {
-      opacity: 1;
-    }
+    .progress-bar.visible { opacity: 1; }
     .progress-fill {
       position: absolute;
       bottom: 0;
@@ -225,125 +190,80 @@
       background: var(--progress-fill);
       transition: height 0.3s;
     }
-
     .progress-info {
       position: fixed;
       left: 16px;
       top: 16px;
-      background: rgba(255, 255, 255, 0.9);
+      background: var(--button-bg);
       padding: 8px 12px;
       border-radius: 8px;
       font-size: 14px;
       opacity: 0;
       transition: opacity 0.3s;
     }
-    .progress-info.visible {
-      opacity: 1;
-    }
+    .progress-info.visible { opacity: 1; }
 
-    /* -----------------------------------------------------------
-       WORD DISPLAY (CENTER)
-       ----------------------------------------------------------- */
-    .word-boundary {
-      position: relative;
-      padding: 40px;
-      border-radius: 12px;
-      background: rgba(var(--bg-color-rgb), 0.1);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transform: translateZ(0);
-      -webkit-backface-visibility: hidden;
-      backface-visibility: hidden;
-    }
-    .word-display {
-      font-size: 36px;
-      font-weight: 500;
-      text-align: center;
-      user-select: none;
-      transition: opacity 0.3s ease;
-    }
-
-    /* -----------------------------------------------------------
-       CONTEXT VIEW - FIXED OVERLAY + VIRTUAL SCROLL
-       ----------------------------------------------------------- */
+    /* ============== CONTEXT VIEW OVERLAY ============== */
     .context-view {
+      display: none; /* hidden by default */
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       background: var(--surface-color);
-      visibility: hidden;
-      opacity: 0;
+      overflow-y: auto;
       z-index: 9999;
-      transition: opacity 0.3s ease, visibility 0.3s;
-      overflow-y: auto; /* we let this container scroll */
-      -webkit-overflow-scrolling: touch;
+      opacity: 0;
+      transition: opacity 0.3s ease-out;
     }
     .context-view.visible {
-      visibility: visible;
+      display: block;
       opacity: 1;
     }
 
     .context-header {
       position: sticky;
       top: 0;
-      background: var(--surface-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
+      background: var(--surface-color);
       border-bottom: 1px solid var(--progress-bg);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-      z-index: 10000;
+      padding: 0 16px;
       height: 60px;
+      z-index: 10000;
     }
     .chapters-dropdown {
       position: relative;
-      margin-right: auto;
       margin-left: 16px;
     }
     .chapters-button,
     .context-undo,
     .context-close-button {
-      padding: 8px 12px;
-      background: var(--surface-color);
       border: 1px solid var(--progress-bg);
+      background: var(--surface-color);
+      padding: 8px 12px;
       border-radius: 8px;
-      color: var(--text-color);
       font-size: 14px;
-      font-weight: 500;
+      cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
+      gap: 6px;
     }
-    .chapters-button:active,
-    .context-undo:active,
-    .context-close-button:active {
-      background: var(--button-hover);
-      transform: scale(0.98);
-    }
-
     .chapters-list {
       position: absolute;
       top: 100%;
       left: 0;
-      width: 280px;
+      width: 240px;
       max-height: 60vh;
       background: var(--surface-color);
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      border-radius: 8px;
       overflow-y: auto;
       opacity: 0;
       pointer-events: none;
       transform: translateY(8px);
-      transition: all 0.2s ease;
-      z-index: 1003;
+      transition: all 0.2s;
       margin-top: 8px;
-      padding: 8px;
+      z-index: 1003;
     }
     .chapters-list.visible {
       opacity: 1;
@@ -352,14 +272,9 @@
     }
     .chapter-item {
       padding: 12px;
-      border-radius: 8px;
+      border-radius: 6px;
       cursor: pointer;
-      transition: all 0.2s ease;
-      color: var(--text-color);
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      transition: background 0.2s;
     }
     .chapter-item:hover {
       background: var(--progress-bg);
@@ -369,52 +284,40 @@
       color: var(--primary-color);
       font-weight: 500;
     }
-    .chapter-progress {
-      font-size: 12px;
-      color: var(--primary-color);
-      font-weight: 500;
-    }
 
-    /* Virtual scroller container & chunk placeholders */
     .context-content {
       position: relative;
       width: 100%;
       box-sizing: border-box;
     }
-    /* The invisible spacer elements to simulate the full height */
-    .top-spacer,
-    .bottom-spacer {
+    .top-spacer, .bottom-spacer {
       height: 0;
       width: 100%;
     }
-
-    /* chunk container where we actually place the rendered text */
     .chunks-container {
       position: relative;
       width: 100%;
     }
-
     .virtual-word {
       cursor: pointer;
       padding: 2px 4px;
       border-radius: 4px;
       display: inline-block;
       user-select: text;
-      transition: all 0.2s ease;
+      transition: background 0.2s;
     }
     .virtual-word:hover {
       background: var(--progress-bg);
       color: var(--primary-color);
     }
     .current-word {
-      font-weight: 600;
-      color: var(--primary-color);
       background: var(--progress-bg);
+      color: var(--primary-color);
+      font-weight: 600;
       padding: 2px 4px;
       border-radius: 4px;
       scroll-margin-top: 100px;
     }
-
     .chapter-indicator {
       display: block;
       text-align: center;
@@ -425,27 +328,14 @@
       color: var(--primary-color);
       font-weight: 500;
       background: var(--surface-color);
-      position: relative;
     }
 
-    /* Hide theme toggle etc. behind the context overlay */
-    .context-view.visible ~ .progress-bar,
-    .context-view.visible ~ .progress-info,
-    .context-view.visible ~ .theme-toggle,
-    .context-view.visible ~ .speed-control,
-    .context-view.visible ~ .wpm-indicator {
-      display: none;
-    }
-
-    /* -----------------------------------------------------------
-       WPM INDICATOR
-       ----------------------------------------------------------- */
+    /* ============== WPM INDICATOR ============== */
     .wpm-indicator {
       position: fixed;
       right: 16px;
       top: 80px;
       background: var(--surface-color);
-      color: var(--text-color);
       padding: 8px 16px;
       border-radius: 8px;
       font-size: 16px;
@@ -453,7 +343,7 @@
       opacity: 0;
       transform: translateY(-10px);
       transition: opacity 0.3s, transform 0.3s;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       z-index: 100;
     }
     .wpm-indicator.visible {
@@ -461,9 +351,7 @@
       transform: translateY(0);
     }
 
-    /* -----------------------------------------------------------
-       PROGRESS NAV (RIGHT SLIDER)
-       ----------------------------------------------------------- */
+    /* ============== PROGRESS NAV (RIGHT) ============== */
     .progress-nav {
       position: fixed;
       right: 24px;
@@ -472,14 +360,12 @@
       width: 12px;
       background: var(--progress-bg);
       border-radius: 6px;
-      opacity: 1;
       cursor: pointer;
       z-index: 90;
     }
     .progress-nav-fill {
       position: absolute;
-      bottom: 0;
-      left: 0;
+      bottom: 0; left: 0;
       width: 100%;
       background: var(--progress-fill);
       border-radius: 4px;
@@ -494,933 +380,995 @@
       font-size: 14px;
       white-space: nowrap;
       transform: translateY(-50%);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-      opacity: 1;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       pointer-events: none;
       transition: opacity 0.2s;
+      opacity: 1;
     }
-    .progress-nav-tooltip .word-preview {
-      font-weight: 500;
+    .word-preview {
       color: var(--primary-color);
+      font-weight: 500;
     }
 
-    /* RESPONSIVE ADJUSTMENTS */
-    @media (max-width: 640px) {
-      .theme-toggle {
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 8px;
-      }
-      .wpm-controls {
-        margin-left: 0;
-        margin-top: 8px;
-        width: calc(100% - 24px);
-        justify-content: space-between;
-        padding: 12px;
-      }
-      .wpm-controls button {
-        width: 48px;
-        height: 48px;
-      }
-      .wpm-controls button svg {
-        width: 24px;
-        height: 24px;
-      }
+    /* Hide theme toggle, progress info, etc. when context overlay is shown */
+    .context-view.visible ~ .progress-bar,
+    .context-view.visible ~ .progress-info,
+    .context-view.visible ~ .theme-toggle,
+    .context-view.visible ~ .wpm-indicator {
+      display: none;
     }
   </style>
 </head>
 <body>
-  <div class="reader-container">
+<div class="reader-container">
+  <!-- ============== BACK BUTTON ============== -->
+  <button class="back-button" onclick="window.location.href='/'">← Back</button>
 
-    <!-- BACK BUTTON -->
-    <button class="back-button" onclick="window.location.href='/'">← Back</button>
-
-    <!-- THEME & WPM CONTROLS (TOP RIGHT) -->
-    <div class="theme-toggle">
-      <div class="theme-buttons">
-        <button class="theme-button active" data-theme="light">Light</button>
-        <button class="theme-button" data-theme="dark">Dark</button>
-        <button class="theme-button" data-theme="sand">Sand</button>
-      </div>
-      <div class="wpm-controls">
-        <button onclick="updateWPM(state.currentWPM - 25)" title="Decrease WPM">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7-7-7"/>
-          </svg>
-        </button>
-        <div class="wpm-value">
-          <span id="wpmValueTop">300</span> WPM
-        </div>
-        <button onclick="updateWPM(state.currentWPM + 25)" title="Increase WPM">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7 7 7"/>
-          </svg>
-        </button>
-      </div>
-      <button class="context-mode-button" id="contextModeButton" onclick="toggleContextView()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-        <span>Context View</span>
-      </button>
+  <!-- ============== THEME & WPM CONTROLS ============== -->
+  <div class="theme-toggle">
+    <div class="theme-buttons">
+      <button class="theme-button active" data-theme="light">Light</button>
+      <button class="theme-button" data-theme="dark">Dark</button>
+      <button class="theme-button" data-theme="sand">Sand</button>
     </div>
-
-    <!-- PROGRESS BAR (LEFT) -->
-    <div class="progress-bar" id="progressBar">
-      <div class="progress-fill" id="progressFill"></div>
+    <div class="wpm-controls">
+      <button onclick="updateWPM(state.currentWPM - 25)">-25</button>
+      <div class="wpm-value"><span id="wpmValueTop">300</span> WPM</div>
+      <button onclick="updateWPM(state.currentWPM + 25)">+25</button>
     </div>
-    <div class="progress-info" id="progressInfo">
-      <div>Chapter <span id="chapterNumber">1</span></div>
-      <div>Page <span id="pageNumber">1</span></div>
-      <div><span id="progressPercent">0</span>%</div>
-    </div>
+    <button class="context-mode-button" id="contextModeButton" onclick="toggleContextView()">
+      <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+      <span>Context View</span>
+    </button>
+  </div>
 
-    <!-- SINGLE WORD DISPLAY -->
-    <div class="word-boundary" id="wordBoundary">
-      <div class="word-display" id="wordDisplay">
-        Tap to start reading
+  <!-- ============== PROGRESS BAR / INFO ============== -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+  <div class="progress-info" id="progressInfo">
+    <div>Chapter <span id="chapterNumber">1</span></div>
+    <div>Page <span id="pageNumber">1</span></div>
+    <div><span id="progressPercent">0</span>%</div>
+  </div>
+
+  <!-- ============== SINGLE WORD DISPLAY ============== -->
+  <div class="word-boundary" id="wordBoundary">
+    <div class="word-display" id="wordDisplay">Tap to start reading</div>
+  </div>
+
+  <!-- ============== WPM INDICATOR ============== -->
+  <div class="wpm-indicator" id="wpmIndicator">
+    <span id="wpmIndicatorValue">300</span> WPM
+  </div>
+
+  <!-- ============== CONTEXT VIEW ============== -->
+  <div class="context-view" id="contextView">
+    <div class="context-header">
+      <div class="chapters-dropdown">
+        <button class="chapters-button" onclick="toggleChaptersList()">Chapters</button>
+        <div class="chapters-list" id="chaptersList"></div>
       </div>
+      <button class="context-undo" onclick="undoLastPosition()">Undo</button>
+      <button class="context-close-button" onclick="hideContextView()">Close</button>
     </div>
-
-    <!-- CONTEXT VIEW OVERLAY (WITH VIRTUAL SCROLL) -->
-    <div class="context-view" id="contextView">
-      <div class="context-header">
-        <div class="chapters-dropdown">
-          <button class="chapters-button" onclick="toggleChaptersList()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M4 6h16M4 12h16M4 18h16"/>
-            </svg>
-            Chapters
-          </button>
-          <div class="chapters-list" id="chaptersList"></div>
-        </div>
-
-        <button class="context-undo" onclick="undoLastPosition()" style="margin-right: 16px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M3 10h10a8 8 0 018 8v2M3 10l6 6M3 10l6-6"/>
-          </svg>
-          Undo
-        </button>
-
-        <button class="context-close-button" onclick="hideContextView()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-          Close
-        </button>
-      </div>
-      <div class="context-content" id="contextContent">
-        <!-- Virtual scrolling approach -->
-        <div class="top-spacer" id="topSpacer"></div>
-        <div class="chunks-container" id="chunksContainer"></div>
-        <div class="bottom-spacer" id="bottomSpacer"></div>
-      </div>
-    </div>
-
-    <!-- WPM INDICATOR -->
-    <div class="wpm-indicator" id="wpmIndicator">
-      <span id="wpmIndicatorValue">300</span> WPM
-    </div>
-
-    <!-- PROGRESS NAV (RIGHT) -->
-    <div class="progress-nav" id="progressNav">
-      <div class="progress-nav-fill" id="progressNavFill"></div>
-      <div class="progress-nav-tooltip" id="progressNavTooltip">
-        <div>Word <span id="wordNumber">0</span> / <span id="totalWords">0</span></div>
-        <div class="word-preview" id="wordPreview"></div>
-      </div>
+    <div class="context-content" id="contextContent">
+      <div class="top-spacer" id="topSpacer"></div>
+      <div class="chunks-container" id="chunksContainer"></div>
+      <div class="bottom-spacer" id="bottomSpacer"></div>
     </div>
   </div>
 
-  <script>
-    /* ----------------------------------------------------------
-       GLOBAL STATE
-       ---------------------------------------------------------- */
-    let state = {
-      isPlaying: false,
-      currentIndex: 0,
-      words: [],
-      chapters: [],
-      undoStack: [],
+  <!-- ============== PROGRESS NAV (RIGHT) ============== -->
+  <div class="progress-nav" id="progressNav">
+    <div class="progress-nav-fill" id="progressNavFill"></div>
+    <div class="progress-nav-tooltip" id="progressNavTooltip">
+      <div>Word <span id="wordNumber">0</span> / <span id="totalWords">0</span></div>
+      <div class="word-preview" id="wordPreview"></div>
+    </div>
+  </div>
+</div>
 
-      // user settings
-      currentWPM: parseInt(localStorage.getItem('reader-wpm')) || 300,
-      readingInterval: null,
-      minWPM: 100,
-      maxWPM: 600,
+<script>
+'use strict';
 
-      // context view
-      contextViewActive: false,
-      wasPlayingBeforeContext: false,
+/* ========================================================================
+   GLOBAL STATE
+========================================================================= */
+const state = {
+  isPlaying: false,
+  currentIndex: 0,
+  words: [],
+  chapters: [],
+  undoStack: [],
 
-      // throttle saving
-      saveTimeout: null,
+  // WPM + Reading
+  currentWPM: parseInt(localStorage.getItem('reader-wpm'), 10) || 300,
+  readingInterval: null,
+  minWPM: 100,
+  maxWPM: 1200,
 
-      /* Virtual Scrolling */
-      chunkSize: 500, // words per chunk
-      chunkedData: [], // array of { startIndex, html, approximateHeight }
-      chunkHeightEstimate: 600, // px estimate for chunk (refined later)
-      topPadding: 0, // space above the rendered chunks
-      bottomPadding: 0
-    };
+  // Context
+  contextViewActive: false,
+  wasPlayingBeforeContext: false,
 
-    /* ----------------------------------------------------------
-       INITIALIZE ON DOM READY
-       ---------------------------------------------------------- */
-    document.addEventListener('DOMContentLoaded', () => {
-      initialize();
+  // Throttle saving
+  saveTimeout: null,
 
-      // Save progress if user leaves
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden) saveProgress(true);
-      });
-      window.addEventListener('beforeunload', () => {
-        saveProgress(true);
-      });
+  // Chunk-based "virtual scroll"
+  chunkSize: 500,
+  chunkedData: [], // each item: { startIndex, endIndex, html, exactHeight }
+  topPadding: 0,
+  bottomPadding: 0,
+  chunksMeasured: false,
+};
+
+
+/* ========================================================================
+   MAIN SETUP
+========================================================================= */
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    console.log('[INIT] DOMContentLoaded - starting main setup');
+
+    // Optional: wait for font loading
+    if (document.fonts && document.fonts.ready) {
+      console.log('[INIT] Waiting for document.fonts.ready...');
+      await document.fonts.ready.catch(() => {});
+      console.log('[INIT] Fonts loaded (or skip due to catch).');
+    }
+
+    // Fetch book content
+    console.log('[INIT] Fetching book content from /api/book/{{ book.id }}/content');
+    const resp = await fetch(`/api/book/{{ book.id }}/content`);
+    if (!resp.ok) {
+      throw new Error('Failed to fetch book content');
+    }
+    const data = await resp.json();
+    console.log('[INIT] Book content fetched successfully:', data);
+
+    // Tokenize content
+    const rawContent = data.content || '';
+    const tokens = rawContent.match(/\w+|\S/g) || [];
+    state.words = tokens;
+    console.log(`[INIT] Tokenized total words: ${state.words.length}`);
+
+    // Current position
+    const pos = parseInt(data.current_position, 10) || 0;
+    state.currentIndex = Math.min(Math.max(pos, 0), state.words.length - 1);
+    console.log(`[INIT] Current position set to: ${state.currentIndex}`);
+
+    // Chapters
+    state.chapters = data.chapters || [];
+    console.log('[INIT] Loaded chapters:', state.chapters);
+
+    // Build chunk data
+    buildChunksOnly();
+
+    // Initialize UI
+    updateAllUI();
+    setupEventListeners();
+    setupProgressNav();
+
+    // Now that everything loaded, enable context button
+    const ctxBtn = document.getElementById('contextModeButton');
+    ctxBtn.style.pointerEvents = 'auto';
+    ctxBtn.style.opacity = '1';
+    console.log('[INIT] Context mode button enabled. Setup complete.');
+
+  } catch (err) {
+    console.error('Error during initialization:', err);
+  }
+});
+
+
+/* ========================================================================
+   CHUNK BUILDING & MEASUREMENT
+========================================================================= */
+function buildChunksOnly() {
+  console.log('[buildChunksOnly] Building chunk data...');
+  state.chunkedData = [];
+  
+  // Estimate average characters per line (based on common reading widths)
+  const CHARS_PER_LINE = 60;
+  const LINES_PER_VIEWPORT = 20;
+  const CHARS_PER_CHUNK = CHARS_PER_LINE * LINES_PER_VIEWPORT;
+  
+  for (let i = 0; i < state.words.length; i += state.chunkSize) {
+    const startIndex = i;
+    const endIndex = Math.min(i + state.chunkSize, state.words.length);
+    const slice = state.words.slice(startIndex, endIndex);
+
+    // Calculate estimated height based on text content
+    const chunkText = slice.join(' ');
+    const estimatedLines = Math.ceil(chunkText.length / CHARS_PER_LINE);
+    const estimatedHeight = estimatedLines * 24; // Assume 24px line height
+
+    const chunkHTML = buildChunkHTML(slice, startIndex, false);
+    state.chunkedData.push({
+      startIndex,
+      endIndex,
+      html: chunkHTML,
+      exactHeight: estimatedHeight // Start with estimated height
     });
+  }
+  console.log(`[buildChunksOnly] Total chunks created: ${state.chunkedData.length}`);
+}
 
-    async function initialize() {
-      try {
-        const resp = await fetch(`/api/book/{{ book.id }}/content`);
-        if (!resp.ok) throw new Error('Failed to fetch book content');
-        const data = await resp.json();
+function measureAllChunks() {
+  if (state.chunksMeasured) {
+    console.log('[measureAllChunks] Already measured. Skipping...');
+    return;
+  }
+  console.log('[measureAllChunks] Starting measurement of all chunks...');
 
-        // More robust tokenization: separate words & punctuation
-        let content = data.content || '';
-        // Example regex that captures words/punctuation/symbols
-        let tokens = content.match(/\w+|\S/g) || [];
+  // Try to measure a test element first
+  const canMeasure = testLayoutMeasurement();
+  if (!canMeasure) {
+    console.log('[measureAllChunks] Layout measurement blocked. Using estimated heights.');
+    state.chunksMeasured = true;
+    return; // Keep using the estimated heights we set in buildChunksOnly
+  }
 
-        state.words = tokens;
-        // set initial position
-        if (data.current_position && !isNaN(data.current_position)) {
-          let pos = parseInt(data.current_position, 10);
-          if (pos >= 0 && pos < state.words.length) {
-            state.currentIndex = pos;
-          }
-        }
-        // chapters
-        if (data.chapters) {
-          state.chapters = data.chapters;
-        }
+  const contextContent = document.getElementById('contextContent');
+  const measureContainer = document.createElement('div');
+  measureContainer.style.cssText = `
+    position: absolute;
+    visibility: hidden;
+    top: -9999px;
+    left: -9999px;
+    width: ${contextContent.clientWidth}px;
+    padding: 0 20px;
+    box-sizing: border-box;
+  `;
+  contextContent.appendChild(measureContainer);
 
-        // Prepare chunked data for virtual scrolling
-        buildChunkData();
+  let gotAnyNonZero = false;
+  for (let i = 0; i < state.chunkedData.length; i++) {
+    const chunk = state.chunkedData[i];
+    const div = document.createElement('div');
+    div.innerHTML = chunk.html;
+    measureContainer.appendChild(div);
 
+    const rect = div.getBoundingClientRect();
+    if (rect.height > 0) {
+      gotAnyNonZero = true;
+      chunk.exactHeight = rect.height;
+    }
+    // If height is 0, keep the estimated height we set earlier
+    
+    measureContainer.removeChild(div);
+  }
+
+  contextContent.removeChild(measureContainer);
+  
+  if (!gotAnyNonZero) {
+    console.warn('[measureAllChunks] All measurements returned 0. Using estimated heights.');
+  } else {
+    console.log('[measureAllChunks] Successfully measured chunk heights.');
+  }
+  
+  state.chunksMeasured = true;
+}
+
+function testLayoutMeasurement() {
+  try {
+    const test = document.createElement('div');
+    test.textContent = 'test';
+    test.style.cssText = 'position:absolute;visibility:hidden;';
+    document.body.appendChild(test);
+    const rect = test.getBoundingClientRect();
+    document.body.removeChild(test);
+    return rect.height > 0;
+  } catch (e) {
+    console.warn('[testLayoutMeasurement] Layout measurement not available:', e);
+    return false;
+  }
+}
+
+function buildChunkHTML(wordArray, offset, highlightCurrent) {
+  let html = '';
+  let chapterIndex = getChapterIndexForWord(offset);
+  let nextChapterPos =
+    (chapterIndex < state.chapters.length) ? state.chapters[chapterIndex].position : -1;
+  let chapterTitle =
+    (chapterIndex < state.chapters.length) ? state.chapters[chapterIndex].title : null;
+
+  for (let i = 0; i < wordArray.length; i++) {
+    const globalIndex = offset + i;
+
+    // Insert chapter indicator if needed
+    if (chapterIndex < state.chapters.length && globalIndex === nextChapterPos) {
+      html += `<div class="chapter-indicator">${chapterTitle}</div>`;
+      chapterIndex++;
+      if (chapterIndex < state.chapters.length) {
+        nextChapterPos = state.chapters[chapterIndex].position;
+        chapterTitle = state.chapters[chapterIndex].title;
+      } else {
+        nextChapterPos = -1;
+      }
+    }
+
+    // Highlight if current word
+    let classes = 'virtual-word';
+    if (highlightCurrent && globalIndex === state.currentIndex) {
+      classes = 'current-word';
+    }
+
+    html += `<span class="${classes}" data-index="${globalIndex}">${wordArray[i]}</span> `;
+  }
+
+  return html;
+}
+
+
+/* ========================================================================
+   EVENT LISTENERS & UI
+========================================================================= */
+function setupEventListeners() {
+  console.log('[setupEventListeners] Setting up...');
+  const wb = document.getElementById('wordBoundary');
+  wb.addEventListener('click', () => {
+    if (!state.contextViewActive) {
+      toggleReading();
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    switch (e.code) {
+      case 'Space':
+        e.preventDefault();
+        toggleReading();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        updateWPM(state.currentWPM + 25);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        updateWPM(state.currentWPM - 25);
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        jumpWords(-10);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        jumpWords(10);
+        break;
+      case 'PageUp':
+        e.preventDefault();
+        jumpWords(-100);
+        break;
+      case 'PageDown':
+        e.preventDefault();
+        jumpWords(100);
+        break;
+      default:
+        // no-op
+        break;
+    }
+  });
+
+  // Theme buttons
+  const themeBtns = document.querySelectorAll('.theme-button');
+  themeBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setTheme(btn.dataset.theme);
+    });
+  });
+  setTheme(localStorage.getItem('reader-theme') || 'light');
+
+  // Scroll in context view
+  document.getElementById('contextContent').addEventListener('scroll', onContextScroll);
+
+  // Click on word in chunks
+  document.getElementById('chunksContainer').addEventListener('click', (e) => {
+    if (e.target.matches('.virtual-word') || e.target.matches('.current-word')) {
+      const i = parseInt(e.target.dataset.index, 10);
+      if (!isNaN(i)) {
+        console.log(`[chunksContainer click] Jumping from index ${state.currentIndex} to ${i}`);
+        pushToUndoStack(state.currentIndex);
+        state.currentIndex = i;
         updateAllUI();
-        setupEventListeners();
-        setupProgressNav();
-      } catch (err) {
-        console.error('Error loading content:', err);
-      }
-    }
-
-    /* ----------------------------------------------------------
-       BUILD CHUNK DATA FOR VIRTUAL SCROLL
-       ---------------------------------------------------------- */
-    function buildChunkData() {
-      // chunk the words
-      state.chunkedData = [];
-      for (let i = 0; i < state.words.length; i += state.chunkSize) {
-        let startIndex = i;
-        let endIndex = Math.min(i + state.chunkSize, state.words.length);
-        // We'll just store the raw slice (HTML is built on-demand or cached).
-        const slice = state.words.slice(startIndex, endIndex);
-        // approximate chunk HTML
-        // We'll do an initial build w/o the highlight
-        let chunkHTML = buildChunkHTML(slice, startIndex, false);
-        // store
-        state.chunkedData.push({
-          startIndex,
-          endIndex,
-          html: chunkHTML,
-          approximateHeight: state.chunkHeightEstimate // refined if needed
-        });
-      }
-      estimateChunkHeights();
-    }
-
-    // Build HTML string for a given slice of words
-    // Optionally highlight the current word if it falls in [start, end).
-    function buildChunkHTML(wordArray, offset, highlightCurrent = true) {
-      let html = '';
-      let chapterIndex = getChapterIndexForWord(offset);
-      let nextChapterPos = (chapterIndex < state.chapters.length)
-        ? state.chapters[chapterIndex].position
-        : -1;
-      let chapterTitle = (chapterIndex < state.chapters.length)
-        ? state.chapters[chapterIndex].title
-        : null;
-
-      for (let i = 0; i < wordArray.length; i++) {
-        let globalIndex = offset + i;
-
-        // check if we've hit next chapter
-        if (chapterIndex < state.chapters.length && globalIndex === nextChapterPos) {
-          html += `<div class="chapter-indicator">${chapterTitle}</div>`;
-          chapterIndex++;
-          if (chapterIndex < state.chapters.length) {
-            nextChapterPos = state.chapters[chapterIndex].position;
-            chapterTitle = state.chapters[chapterIndex].title;
-          } else {
-            nextChapterPos = -1;
-          }
-        }
-
-        let classes = 'virtual-word';
-        if (highlightCurrent && globalIndex === state.currentIndex) {
-          classes = 'current-word';
-        }
-        html += `<span class="${classes}" data-index="${globalIndex}">${wordArray[i]}</span> `;
-      }
-      return html;
-    }
-
-    // Roughly measure the first chunk to refine chunkHeightEstimate
-    function estimateChunkHeights() {
-      let tmpContainer = document.createElement('div');
-      tmpContainer.style.position = 'absolute';
-      tmpContainer.style.visibility = 'hidden';
-      tmpContainer.style.width = '600px'; // approximate reading width
-      tmpContainer.innerHTML = state.chunkedData[0]?.html || '';
-      document.body.appendChild(tmpContainer);
-
-      let measuredHeight = tmpContainer.offsetHeight;
-      document.body.removeChild(tmpContainer);
-
-      if (measuredHeight > 0) {
-        // scale up for how many words are in chunk 0
-        let chunkWordCount = Math.min(state.chunkSize, state.words.length);
-        // We'll estimate px per word
-        let pxPerWord = measuredHeight / chunkWordCount;
-        // Then apply that to all chunks
-        state.chunkHeightEstimate = pxPerWord * state.chunkSize;
-        state.chunkedData.forEach(chunk => {
-          let chunkLen = chunk.endIndex - chunk.startIndex;
-          chunk.approximateHeight = pxPerWord * chunkLen;
-        });
-      }
-    }
-
-    /* ----------------------------------------------------------
-       UPDATE UI
-       ---------------------------------------------------------- */
-    function updateAllUI() {
-      const display = document.getElementById('wordDisplay');
-      display.textContent = state.words[state.currentIndex] || '';
-      // progress
-      updateProgress();
-      updateProgressNav();
-      // wpm top
-      document.getElementById('wpmValueTop').textContent = state.currentWPM;
-      // chapter info
-      const c = findChapterForIndex(state.currentIndex);
-      if (c) {
-        document.getElementById('chapterNumber').textContent = c.title;
-      }
-      // throttle save
-      saveProgress(false);
-    }
-
-    /* ----------------------------------------------------------
-       EVENT LISTENERS
-       ---------------------------------------------------------- */
-    function setupEventListeners() {
-      const wb = document.getElementById('wordBoundary');
-      wb.addEventListener('click', () => {
-        if (!state.contextViewActive) {
-          toggleReading();
-        }
-      });
-
-      // Additional keyboard shortcuts
-      document.addEventListener('keydown', (e) => {
-        switch(e.code) {
-          case 'Space':
-            e.preventDefault();
-            toggleReading();
-            break;
-          case 'ArrowUp':
-            e.preventDefault();
-            updateWPM(state.currentWPM + 25);
-            break;
-          case 'ArrowDown':
-            e.preventDefault();
-            updateWPM(state.currentWPM - 25);
-            break;
-          case 'ArrowLeft':
-            e.preventDefault();
-            jumpWords(-10); // jump back 10 words
-            break;
-          case 'ArrowRight':
-            e.preventDefault();
-            jumpWords(10); // jump forward 10 words
-            break;
-          case 'PageUp':
-            e.preventDefault();
-            jumpWords(-100);
-            break;
-          case 'PageDown':
-            e.preventDefault();
-            jumpWords(100);
-            break;
-          default:
-            break;
-        }
-      });
-
-      // theme buttons
-      document.querySelectorAll('.theme-button').forEach(btn => {
-        btn.addEventListener('click', () => {
-          setTheme(btn.dataset.theme);
-        });
-      });
-
-      // initialize saved theme
-      const savedTheme = localStorage.getItem('reader-theme') || 'light';
-      setTheme(savedTheme);
-
-      // Virtual scroll event in context content
-      const contextEl = document.getElementById('contextContent');
-      contextEl.addEventListener('scroll', onContextScroll);
-
-      // Delegated click for words in the chunks container
-      const chunksContainer = document.getElementById('chunksContainer');
-      chunksContainer.addEventListener('click', (e) => {
-        if (e.target.matches('.virtual-word') || e.target.matches('.current-word')) {
-          const i = parseInt(e.target.dataset.index, 10);
-          if (!isNaN(i)) {
-            pushToUndoStack(state.currentIndex);
-            state.currentIndex = i;
-            updateAllUI();
-            // We'll re-render the visible chunks with highlight
-            renderVisibleChunks();
-            scrollCurrentWordIntoView();
-          }
-        }
-      });
-    }
-
-    /* Jump words by offset (arrow/page keys) */
-    function jumpWords(offset) {
-      let newIndex = state.currentIndex + offset;
-      newIndex = Math.max(0, Math.min(newIndex, state.words.length - 1));
-      pushToUndoStack(state.currentIndex);
-      state.currentIndex = newIndex;
-      updateAllUI();
-
-      if (state.isPlaying) {
-        pauseReading();
-        startReading(); // re-start interval
-      }
-      if (state.contextViewActive) {
         renderVisibleChunks();
         scrollCurrentWordIntoView();
       }
     }
+  });
+}
 
-    /* ----------------------------------------------------------
-       READING CONTROL
-       ---------------------------------------------------------- */
-    function toggleReading() {
-      if (state.isPlaying) {
-        pauseReading();
-        document.getElementById('progressNavTooltip').style.opacity = '1';
-      } else {
-        startReading();
-        document.getElementById('progressNavTooltip').style.opacity = '0';
-      }
-    }
+function updateAllUI() {
+  console.log('[updateAllUI] Updating main UI elements...');
+  const display = document.getElementById('wordDisplay');
+  display.textContent = state.words[state.currentIndex] || '';
 
-    function startReading() {
+  updateProgress();
+  updateProgressNav();
+  document.getElementById('wpmValueTop').textContent = state.currentWPM.toString();
+
+  const c = findChapterForIndex(state.currentIndex);
+  document.getElementById('chapterNumber').textContent = c ? c.title : 'N/A';
+
+  // Throttle saving
+  saveProgress(false);
+}
+
+
+/* ========================================================================
+   READING CONTROL
+========================================================================= */
+function toggleReading() {
+  if (state.isPlaying) {
+    console.log('[toggleReading] Pausing...');
+    pauseReading();
+    document.getElementById('progressNavTooltip').style.opacity = '1';
+  } else {
+    console.log('[toggleReading] Starting reading...');
+    startReading();
+    document.getElementById('progressNavTooltip').style.opacity = '0';
+  }
+}
+
+function startReading() {
+  pauseReading();
+  state.isPlaying = true;
+  console.log('[startReading] Reading started. Current index:', state.currentIndex);
+
+  const intervalMS = 60000 / state.currentWPM;
+  const disp = document.getElementById('wordDisplay');
+  disp.textContent = state.words[state.currentIndex] || '';
+
+  state.readingInterval = setInterval(() => {
+    if (state.currentIndex >= state.words.length - 1) {
+      console.log('[startReading] Reached end of words. Stopping.');
       pauseReading();
-      state.isPlaying = true;
-      const intervalMS = calculateInterval(state.currentWPM);
-      const disp = document.getElementById('wordDisplay');
-      disp.textContent = state.words[state.currentIndex] || '';
-
-      state.readingInterval = setInterval(() => {
-        if (state.currentIndex >= state.words.length - 1) {
-          pauseReading();
-          return;
-        }
-        state.currentIndex++;
-        disp.textContent = state.words[state.currentIndex];
-        updateProgress();
-        updateProgressNav();
-        saveProgress(false);
-      }, intervalMS);
+      return;
     }
+    state.currentIndex++;
+    disp.textContent = state.words[state.currentIndex] || '';
+    updateProgress();
+    updateProgressNav();
+    saveProgress(false);
+  }, intervalMS);
+}
 
-    function pauseReading() {
-      state.isPlaying = false;
-      if (state.readingInterval) {
-        clearInterval(state.readingInterval);
-        state.readingInterval = null;
-      }
+function pauseReading() {
+  state.isPlaying = false;
+  if (state.readingInterval) {
+    clearInterval(state.readingInterval);
+    state.readingInterval = null;
+  }
+  console.log('[pauseReading] Reading paused.');
+}
+
+function jumpWords(offset) {
+  const oldIndex = state.currentIndex;
+  let newIndex = oldIndex + offset;
+  newIndex = Math.max(0, Math.min(newIndex, state.words.length - 1));
+  console.log(`[jumpWords] Jumping from ${oldIndex} to ${newIndex} (offset ${offset}).`);
+  pushToUndoStack(oldIndex);
+  state.currentIndex = newIndex;
+  updateAllUI();
+
+  if (state.isPlaying) {
+    pauseReading();
+    startReading();
+  }
+  if (state.contextViewActive) {
+    renderVisibleChunks();
+    scrollCurrentWordIntoView();
+  }
+}
+
+
+/* ========================================================================
+   PROGRESS INFO
+========================================================================= */
+function updateProgress() {
+  const fill = document.getElementById('progressFill');
+  const percentEl = document.getElementById('progressPercent');
+
+  if (state.words.length > 1) {
+    const ratio = state.currentIndex / (state.words.length - 1);
+    const pct = Math.round(ratio * 100);
+    fill.style.height = pct + '%';
+    percentEl.textContent = String(pct);
+  } else {
+    fill.style.height = '0%';
+    percentEl.textContent = '0';
+  }
+}
+
+
+/* ========================================================================
+   SAVE PROGRESS
+========================================================================= */
+function saveProgress(immediate) {
+  if (immediate) {
+    doSaveProgress();
+    return;
+  }
+  if (state.saveTimeout) {
+    clearTimeout(state.saveTimeout);
+  }
+  state.saveTimeout = setTimeout(() => {
+    doSaveProgress();
+  }, 1000);
+}
+
+async function doSaveProgress() {
+  localStorage.setItem('reader-wpm', state.currentWPM);
+  localStorage.setItem(`book-{{ book.id }}-position`, state.currentIndex);
+  console.log(`[doSaveProgress] Saving position = ${state.currentIndex}, WPM = ${state.currentWPM}`);
+
+  try {
+    await fetch(`/api/book/{{ book.id }}/position`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position: state.currentIndex, wpm: state.currentWPM })
+    });
+    console.log('[doSaveProgress] Progress saved to server.');
+  } catch (err) {
+    console.warn('Could not save progress:', err);
+  }
+}
+
+
+/* ========================================================================
+   WPM CONTROL
+========================================================================= */
+let wpmIndicatorTimer;
+function updateWPM(val) {
+  const oldWPM = state.currentWPM;
+  const w = Math.max(state.minWPM, Math.min(state.maxWPM, val));
+  state.currentWPM = w;
+  console.log(`[updateWPM] Changed from ${oldWPM} -> ${w}`);
+
+  document.getElementById('wpmValueTop').textContent = String(w);
+  document.getElementById('wpmIndicatorValue').textContent = String(w);
+  showWPMIndicator();
+
+  if (state.isPlaying) {
+    pauseReading();
+    startReading();
+  }
+}
+
+function showWPMIndicator() {
+  const ind = document.getElementById('wpmIndicator');
+  ind.classList.add('visible');
+  if (wpmIndicatorTimer) {
+    clearTimeout(wpmIndicatorTimer);
+  }
+  wpmIndicatorTimer = setTimeout(() => {
+    ind.classList.remove('visible');
+  }, 1500);
+}
+
+
+/* ========================================================================
+   CONTEXT VIEW TOGGLE
+========================================================================= */
+function toggleContextView() {
+  if (state.contextViewActive) {
+    hideContextView();
+  } else {
+    showContextView();
+  }
+}
+
+function showContextView() {
+  console.log('[showContextView] Toggling ON context view...');
+  state.wasPlayingBeforeContext = state.isPlaying;
+  if (state.isPlaying) {
+    pauseReading();
+  }
+
+  // Set active state first
+  state.contextViewActive = true;
+  
+  // Ensure chunks are ready (measured or estimated)
+  if (!state.chunksMeasured) {
+    measureAllChunks();
+  }
+
+  const cv = document.getElementById('contextView');
+  const content = document.getElementById('contextContent');
+
+  // Set initial styles for smooth transition
+  cv.style.display = 'block';
+  content.style.cssText = `
+    padding: 0 20px;
+    box-sizing: border-box;
+    max-width: 800px;
+    margin: 0 auto;
+    line-height: 1.6;
+  `;
+
+  // Show the view and render content
+  requestAnimationFrame(() => {
+    cv.classList.add('visible');
+    renderVisibleChunks();
+    
+    // Scroll to current word after render
+    requestAnimationFrame(() => {
+      scrollCurrentWordIntoView(false);
+    });
+  });
+
+  const btn = document.getElementById('contextModeButton');
+  btn.classList.add('active');
+  btn.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M6 18L18 6M6 6l12 12"/>
+    </svg>
+    <span>Close View</span>
+  `;
+}
+
+function hideContextView() {
+  console.log('[hideContextView] Toggling OFF context view...');
+  state.contextViewActive = false;
+  
+  const cv = document.getElementById('contextView');
+  cv.classList.remove('visible');
+  
+  // Important: Set display none AFTER a short delay to allow transition
+  setTimeout(() => {
+    if (!state.contextViewActive) { // Double check state hasn't changed
+      cv.style.display = 'none';
     }
+  }, 300); // Match transition duration from CSS
 
-    function calculateInterval(wpm) {
-      return 60000 / wpm; // ms per word
+  if (state.wasPlayingBeforeContext) {
+    startReading();
+  }
+  state.wasPlayingBeforeContext = false;
+
+  // Restore single-word display
+  document.getElementById('wordDisplay').textContent =
+    state.words[state.currentIndex] || '';
+
+  const btn = document.getElementById('contextModeButton');
+  btn.classList.remove('active');
+  btn.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>
+    <span>Context View</span>
+  `;
+  console.log('[hideContextView] Context view hidden.');
+}
+
+
+/* ========================================================================
+   CONTEXT SCROLL & RENDER
+========================================================================= */
+function onContextScroll() {
+  if (!state.chunksMeasured) {
+    console.warn('[onContextScroll] Chunks not measured yet. Not rendering.');
+    return;
+  }
+  renderVisibleChunks();
+}
+
+function renderVisibleChunks() {
+  console.log('[renderVisibleChunks] Start...');
+  const container = document.getElementById('contextContent');
+  const scrollTop = container.scrollTop;
+  const viewHeight = container.clientHeight;
+
+  // Determine which chunk is at top
+  let startIndexChunk = 0;
+  let accumulated = 0;
+  for (let i = 0; i < state.chunkedData.length; i++) {
+    const cData = state.chunkedData[i];
+    if (accumulated + cData.exactHeight > scrollTop) {
+      startIndexChunk = i;
+      break;
     }
+    accumulated += cData.exactHeight;
+  }
 
-    /* ----------------------------------------------------------
-       PROGRESS
-       ---------------------------------------------------------- */
-    function updateProgress() {
-      let ratio = 0;
-      if (state.words.length > 0) {
-        ratio = state.currentIndex / (state.words.length - 1);
-      }
-      const pct = Math.round(ratio * 100);
-      document.getElementById('progressFill').style.height = pct + '%';
-      document.getElementById('progressPercent').textContent = pct;
-    }
+  // Collect visible chunks
+  const visibleChunks = [];
+  let usedHeight = 0;
+  let j = startIndexChunk;
+  while (j < state.chunkedData.length && usedHeight < viewHeight * 1.5) {
+    visibleChunks.push(state.chunkedData[j]);
+    usedHeight += state.chunkedData[j].exactHeight;
+    j++;
+  }
 
-    /* ----------------------------------------------------------
-       SAVE PROGRESS (THROTTLED)
-       ---------------------------------------------------------- */
-    function saveProgress(immediate = false) {
-      if (immediate) {
-        doSaveProgress();
-        return;
-      }
-      if (state.saveTimeout) clearTimeout(state.saveTimeout);
-      state.saveTimeout = setTimeout(() => {
-        doSaveProgress();
-      }, 2000);
-    }
-    async function doSaveProgress() {
-      localStorage.setItem('reader-wpm', state.currentWPM);
-      localStorage.setItem(`book-{{ book.id }}-position`, state.currentIndex);
-      try {
-        await fetch(`/api/book/{{ book.id }}/position`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            position: state.currentIndex,
-            wpm: state.currentWPM
-          })
-        });
-      } catch (err) {
-        console.warn('Could not save progress to server:', err);
-      }
-    }
+  state.topPadding = accumulated;
+  let bottomAccum = 0;
+  for (let k = j; k < state.chunkedData.length; k++) {
+    bottomAccum += state.chunkedData[k].exactHeight;
+  }
+  state.bottomPadding = bottomAccum;
 
-    /* ----------------------------------------------------------
-       WPM CONTROL
-       ---------------------------------------------------------- */
-    let wpmIndicatorTimer;
-    function updateWPM(newVal) {
-      let w = Math.max(state.minWPM, Math.min(state.maxWPM, newVal));
-      state.currentWPM = w;
-      document.getElementById('wpmValueTop').textContent = w;
-      document.getElementById('wpmIndicatorValue').textContent = w;
-      showWPMIndicator();
+  console.log(`[renderVisibleChunks] startIndexChunk=${startIndexChunk}, visibleChunks=${visibleChunks.length}, topPadding=${state.topPadding}, bottomPadding=${state.bottomPadding}`);
 
-      if (state.isPlaying) {
-        pauseReading();
-        startReading();
-      }
-    }
+  let finalHTML = '';
+  for (let i = 0; i < visibleChunks.length; i++) {
+    const chunk = visibleChunks[i];
+    const highlight = (
+      state.currentIndex >= chunk.startIndex && state.currentIndex < chunk.endIndex
+    );
 
-    function showWPMIndicator() {
-      const indicator = document.getElementById('wpmIndicator');
-      indicator.classList.add('visible');
-      if (wpmIndicatorTimer) clearTimeout(wpmIndicatorTimer);
-      wpmIndicatorTimer = setTimeout(() => {
-        indicator.classList.remove('visible');
-      }, 1500);
-    }
+    // Rebuild chunk HTML so we highlight the current word if it's in range
+    chunk.html = buildChunkHTML(
+      state.words.slice(chunk.startIndex, chunk.endIndex),
+      chunk.startIndex,
+      highlight
+    );
+    finalHTML += `<div data-chunk-start="${chunk.startIndex}">${chunk.html}</div>`;
+  }
 
-    /* ----------------------------------------------------------
-       CONTEXT VIEW - OPEN/CLOSE
-       ---------------------------------------------------------- */
-    function toggleContextView() {
-      if (state.contextViewActive) {
-        hideContextView();
-      } else {
-        showContextView();
-      }
-    }
+  document.getElementById('chunksContainer').innerHTML = finalHTML;
+  document.getElementById('topSpacer').style.height = state.topPadding + 'px';
+  document.getElementById('bottomSpacer').style.height = state.bottomPadding + 'px';
 
-    function findChunkIndexForWord(wordIndex) {
-      // Helper to locate which chunk contains 'wordIndex'
-      for (let i = 0; i < state.chunkedData.length; i++) {
-        const chunk = state.chunkedData[i];
-        if (wordIndex >= chunk.startIndex && wordIndex < chunk.endIndex) {
-          return i;
-        }
-      }
-      return 0; // fallback, should not happen unless empty
-    }
+  console.log('[renderVisibleChunks] Render complete.');
+}
 
-    function showContextView() {
-      state.wasPlayingBeforeContext = state.isPlaying;
-      if (state.isPlaying) pauseReading();
-      state.contextViewActive = true;
-
-      // 1) Force the container to scroll to the chunk containing currentIndex
-      const container = document.getElementById('contextContent');
-      const chunkIndex = findChunkIndexForWord(state.currentIndex);
-      let offsetAbove = 0;
-      for (let i = 0; i < chunkIndex; i++) {
-        offsetAbove += state.chunkedData[i].approximateHeight;
-      }
-      // This ensures that chunk will be in the "visible range" after we render
-      container.scrollTop = offsetAbove;
-
-      // 2) Render chunks *after* setting scrollTop, so the correct chunk is visible
-      renderVisibleChunks();
-
-      // Show the context view overlay
-      const cv = document.getElementById('contextView');
-      cv.classList.add('visible');
-
-      // 3) In the next frame, call scrollCurrentWordIntoView so highlight is visible
-      requestAnimationFrame(() => {
-        // We might need to call renderVisibleChunks() again if the approximate
-        // offset was slightly off. Usually once is enough, but occasionally
-        // a second pass helps.
-        // renderVisibleChunks();
-
-        scrollCurrentWordIntoView(false);
+function scrollCurrentWordIntoView(smooth) {
+  const doSmooth = (typeof smooth === 'boolean') ? smooth : true;
+  console.log(`[scrollCurrentWordIntoView] Called with smooth=${doSmooth}`);
+  requestAnimationFrame(() => {
+    const currentEl = document.querySelector('.current-word');
+    if (currentEl) {
+      currentEl.scrollIntoView({
+        block: 'center',
+        behavior: doSmooth ? 'smooth' : 'auto'
       });
+      console.log('[scrollCurrentWordIntoView] Scrolled current word into view.');
+    } else {
+      console.log('[scrollCurrentWordIntoView] No .current-word found.');
+    }
+  });
+}
 
-      // update button
-      const btn = document.getElementById('contextModeButton');
-      btn.classList.add('active');
-      btn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"/>
-        </svg>
-        <span>Close View</span>
-      `;
+
+/* ========================================================================
+   CHAPTERS
+========================================================================= */
+function toggleChaptersList() {
+  console.log('[toggleChaptersList] Toggle chapters list...');
+  const list = document.getElementById('chaptersList');
+  list.classList.toggle('visible');
+  if (list.classList.contains('visible')) {
+    updateChaptersList();
+  }
+}
+
+function updateChaptersList() {
+  console.log('[updateChaptersList] Building chapters list...');
+  const list = document.getElementById('chaptersList');
+  list.innerHTML = '';
+
+  for (let i = 0; i < state.chapters.length; i++) {
+    const chap = state.chapters[i];
+    const nextPos = (i < state.chapters.length - 1)
+      ? state.chapters[i + 1].position
+      : state.words.length;
+
+    const inThisChapter =
+      (state.currentIndex >= chap.position && state.currentIndex < nextPos);
+
+    let progress = 0;
+    if (inThisChapter) {
+      const chapterSize = nextPos - chap.position;
+      const offset = state.currentIndex - chap.position;
+      progress = Math.round((offset / chapterSize) * 100);
+    } else if (state.currentIndex >= nextPos) {
+      progress = 100;
     }
 
-    function hideContextView() {
-      state.contextViewActive = false;
-      const cv = document.getElementById('contextView');
-      cv.classList.remove('visible');
+    const div = document.createElement('div');
+    div.className = 'chapter-item' + (inThisChapter ? ' current' : '');
+    div.innerHTML = `${chap.title} <span style="float:right;">${progress}%</span>`;
+    div.onclick = () => {
+      console.log(`[updateChaptersList] Jumping to chapter pos=${chap.position}`);
+      jumpToChapter(chap.position);
+    };
+    list.appendChild(div);
+  }
+}
 
-      if (state.wasPlayingBeforeContext) {
-        startReading();
-      }
-      state.wasPlayingBeforeContext = false;
+function jumpToChapter(pos) {
+  pushToUndoStack(state.currentIndex);
+  state.currentIndex = pos;
+  console.log(`[jumpToChapter] Jumping to index=${pos}`);
+  updateAllUI();
+  renderVisibleChunks();
+  scrollCurrentWordIntoView();
+  document.getElementById('chaptersList').classList.remove('visible');
+}
 
-      // single word display
-      document.getElementById('wordDisplay').textContent =
-        state.words[state.currentIndex] || '';
-
-      // update button
-      const btn = document.getElementById('contextModeButton');
-      btn.classList.remove('active');
-      btn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16"/>
-        </svg>
-        <span>Context View</span>
-      `;
+function findChapterForIndex(idx) {
+  for (let i = 0; i < state.chapters.length; i++) {
+    const chap = state.chapters[i];
+    const nextPos = (i < state.chapters.length - 1)
+      ? state.chapters[i+1].position
+      : state.words.length;
+    if (idx >= chap.position && idx < nextPos) {
+      return chap;
     }
+  }
+  return null;
+}
 
-    /* ----------------------------------------------------------
-       VIRTUAL SCROLLING CORE
-       ---------------------------------------------------------- */
-    function onContextScroll() {
-      renderVisibleChunks();
+function getChapterIndexForWord(globalIndex) {
+  let cIndex = 0;
+  for (let i = 0; i < state.chapters.length; i++) {
+    const nextPos = (i < state.chapters.length - 1)
+      ? state.chapters[i+1].position
+      : state.words.length;
+    if (globalIndex >= state.chapters[i].position && globalIndex < nextPos) {
+      cIndex = i;
+      break;
     }
+  }
+  return cIndex;
+}
 
-    function renderVisibleChunks() {
-      const container = document.getElementById('contextContent');
-      const scrollTop = container.scrollTop;
-      const viewHeight = container.clientHeight;
 
-      let startPos = 0;
-      let accumulatedHeight = 0;
-      let endPos = 0;
+/* ========================================================================
+   UNDO STACK
+========================================================================= */
+function pushToUndoStack(pos) {
+  state.undoStack.push(pos);
+  if (state.undoStack.length > 20) {
+    state.undoStack.shift();
+  }
+  console.log('[pushToUndoStack] Stack size now:', state.undoStack.length);
+}
 
-      // Figure out which chunks to show:
-      // We'll accumulate chunkHeights until we exceed scrollTop for start
-      let startIndexChunk = 0;
-      for (let i = 0; i < state.chunkedData.length; i++) {
-        if (accumulatedHeight + state.chunkedData[i].approximateHeight > scrollTop) {
-          startIndexChunk = i;
-          break;
-        }
-        accumulatedHeight += state.chunkedData[i].approximateHeight;
-      }
-
-      // We have the chunk where scrollTop lies
-      // now we gather enough chunks until we cover viewHeight
-      let visibleChunks = [];
-      let visibleHeight = 0;
-      let j = startIndexChunk;
-      while (j < state.chunkedData.length && visibleHeight < viewHeight * 1.5) {
-        visibleChunks.push(state.chunkedData[j]);
-        visibleHeight += state.chunkedData[j].approximateHeight;
-        j++;
-      }
-
-      // The top spacer is everything above startIndexChunk
-      state.topPadding = accumulatedHeight;
-      // The bottom spacer is everything from j to the end
-      let bottomAccum = 0;
-      for (let k = j; k < state.chunkedData.length; k++) {
-        bottomAccum += state.chunkedData[k].approximateHeight;
-      }
-      state.bottomPadding = bottomAccum;
-
-      // Rebuild the chunk HTML (with highlight)
-      // We'll only do it if needed or for simplicity do it each time
-      let finalHTML = '';
-      visibleChunks.forEach(chunk => {
-        let highlight = (state.currentIndex >= chunk.startIndex && state.currentIndex < chunk.endIndex);
-        if (highlight) {
-          // re-generate chunk HTML with highlight
-          chunk.html = buildChunkHTML(
-            state.words.slice(chunk.startIndex, chunk.endIndex),
-            chunk.startIndex,
-            true
-          );
-        } else {
-          // If there's no potential highlight, keep the existing cached chunk.html
-          // (We could still re-check chapter boundaries, but let's keep it simple.)
-        }
-        finalHTML += `<div data-chunk-start="${chunk.startIndex}">${chunk.html}</div>`;
-      });
-
-      const chunksContainer = document.getElementById('chunksContainer');
-      chunksContainer.innerHTML = finalHTML;
-      document.getElementById('topSpacer').style.height = state.topPadding + 'px';
-      document.getElementById('bottomSpacer').style.height = state.bottomPadding + 'px';
-    }
-
-    function scrollCurrentWordIntoView(smooth = true) {
-      // find which chunk the current index is in
-      let chunkIndex = state.chunkedData.findIndex(ch =>
-        (state.currentIndex >= ch.startIndex && state.currentIndex < ch.endIndex)
-      );
-      if (chunkIndex < 0) return;
-
-      // sum the heights of all preceding chunks
-      let offsetAbove = 0;
-      for (let i = 0; i < chunkIndex; i++) {
-        offsetAbove += state.chunkedData[i].approximateHeight;
-      }
-      // We'll just scroll to that approximate position
-      const container = document.getElementById('contextContent');
-      container.scrollTo({
-        top: offsetAbove,
-        behavior: smooth ? 'smooth' : 'auto'
-      });
-    }
-
-    /* ----------------------------------------------------------
-       CHAPTERS
-       ---------------------------------------------------------- */
-    function toggleChaptersList() {
-      const list = document.getElementById('chaptersList');
-      list.classList.toggle('visible');
-      if (list.classList.contains('visible')) {
-        updateChaptersList();
-      }
-    }
-
-    function updateChaptersList() {
-      const list = document.getElementById('chaptersList');
-      list.innerHTML = '';
-
-      for (let i = 0; i < state.chapters.length; i++) {
-        const chap = state.chapters[i];
-        const nextPos = (i < state.chapters.length - 1)
-          ? state.chapters[i + 1].position
-          : state.words.length;
-
-        let inThisChapter = (state.currentIndex >= chap.position && state.currentIndex < nextPos);
-        let progress = 0;
-        if (inThisChapter) {
-          let chapterSize = nextPos - chap.position;
-          let offset = state.currentIndex - chap.position;
-          progress = Math.round((offset / chapterSize) * 100);
-        } else if (state.currentIndex >= nextPos) {
-          progress = 100;
-        }
-
-        const div = document.createElement('div');
-        div.className = 'chapter-item' + (inThisChapter ? ' current' : '');
-        div.innerHTML = `
-          <span>${chap.title}</span>
-          <span class="chapter-progress">${progress}%</span>
-        `;
-        div.onclick = () => jumpToChapter(chap.position);
-        list.appendChild(div);
-      }
-    }
-
-    function jumpToChapter(pos) {
-      pushToUndoStack(state.currentIndex);
-      state.currentIndex = pos;
-      updateAllUI();
+function undoLastPosition() {
+  if (state.undoStack.length > 0) {
+    const last = state.undoStack.pop();
+    console.log(`[undoLastPosition] Undoing to pos=${last}`);
+    state.currentIndex = last;
+    updateAllUI();
+    if (state.contextViewActive) {
       renderVisibleChunks();
       scrollCurrentWordIntoView();
-      document.getElementById('chaptersList').classList.remove('visible');
     }
+  } else {
+    console.log('[undoLastPosition] No previous position in stack.');
+  }
+}
 
-    function findChapterForIndex(idx) {
-      for (let i = 0; i < state.chapters.length; i++) {
-        const chap = state.chapters[i];
-        const nextPos = (i < state.chapters.length - 1) ? state.chapters[i + 1].position : state.words.length;
-        if (idx >= chap.position && idx < nextPos) {
-          return chap;
-        }
-      }
-      return null;
+
+/* ========================================================================
+   THEME
+========================================================================= */
+function setTheme(theme) {
+  console.log(`[setTheme] Setting theme to: ${theme}`);
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('reader-theme', theme);
+
+  const btns = document.querySelectorAll('.theme-button');
+  btns.forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.theme === theme);
+  });
+}
+
+
+/* ========================================================================
+   PROGRESS NAV
+========================================================================= */
+function setupProgressNav() {
+  console.log('[setupProgressNav] Initializing progress nav...');
+  const nav = document.getElementById('progressNav');
+  const fill = document.getElementById('progressNavFill');
+  const tooltip = document.getElementById('progressNavTooltip');
+  const wordDisp = document.getElementById('wordDisplay');
+
+  let isDragging = false;
+
+  function updateFromY(clientY) {
+    const rect = nav.getBoundingClientRect();
+    let ratio = 1 - (clientY - rect.top) / rect.height;
+    ratio = Math.max(0, Math.min(ratio, 1));
+
+    let i = Math.floor(ratio * (state.words.length - 1));
+    i = Math.max(0, Math.min(i, state.words.length - 1));
+
+    const pct = Math.round((i / (state.words.length - 1)) * 100);
+    fill.style.height = pct + '%';
+
+    tooltip.innerHTML = `
+      <div>Word ${i + 1} / ${state.words.length} (${pct}%)</div>
+      <div class="word-preview">${state.words[i] || ''}</div>
+    `;
+
+    // Position tooltip
+    const tRect = tooltip.getBoundingClientRect();
+    let tY = clientY - (tRect.height / 2);
+    const minY = rect.top;
+    const maxY = rect.bottom - tRect.height;
+    if (tY < minY) tY = minY;
+    if (tY > maxY) tY = maxY;
+    tooltip.style.top = tY + 'px';
+
+    wordDisp.textContent = state.words[i] || '';
+    return i;
+  }
+
+  function onDragStart(e) {
+    console.log('[progressNav] Drag start');
+    isDragging = true;
+    if (state.isPlaying) {
+      pauseReading();
     }
+    onDragMove(e);
+  }
 
-    // helper: which chapter index are we currently in (for building chunk HTML)
-    function getChapterIndexForWord(globalIndex) {
-      // simple linear search
-      let cIndex = 0;
-      for (let i = 0; i < state.chapters.length; i++) {
-        let nextPos = (i < state.chapters.length - 1) ? state.chapters[i+1].position : state.words.length;
-        if (globalIndex >= state.chapters[i].position && globalIndex < nextPos) {
-          cIndex = i;
-          break;
-        }
-      }
-      return cIndex;
+  function onDragMove(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    const clientY = e.type.includes('touch')
+      ? e.touches[0].clientY
+      : e.clientY;
+    state.currentIndex = updateFromY(clientY);
+    updateProgressNav();
+  }
+
+  function onDragEnd() {
+    if (!isDragging) return;
+    console.log('[progressNav] Drag end');
+    isDragging = false;
+    saveProgress(false);
+
+    if (state.contextViewActive) {
+      renderVisibleChunks();
+      scrollCurrentWordIntoView(false);
     }
+  }
 
-    /* ----------------------------------------------------------
-       UNDO
-       ---------------------------------------------------------- */
-    function pushToUndoStack(pos) {
-      state.undoStack.push(pos);
-      if (state.undoStack.length > 10) {
-        state.undoStack.shift();
-      }
+  nav.addEventListener('mousedown', onDragStart);
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup', onDragEnd);
+
+  nav.addEventListener('touchstart', onDragStart, { passive: false });
+  document.addEventListener('touchmove', onDragMove, { passive: false });
+  document.addEventListener('touchend', onDragEnd);
+  document.addEventListener('touchcancel', onDragEnd);
+
+  // Press "N" to toggle nav visibility
+  document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'n') {
+      const style = window.getComputedStyle(nav);
+      const op = style.opacity;
+      nav.style.opacity = (op === '1') ? '0' : '1';
+      console.log(`[progressNav] "N" pressed. Toggled nav opacity to: ${nav.style.opacity}`);
     }
-    function undoLastPosition() {
-      if (state.undoStack.length > 0) {
-        const last = state.undoStack.pop();
-        state.currentIndex = last;
-        updateAllUI();
-        if (state.contextViewActive) {
-          renderVisibleChunks();
-          scrollCurrentWordIntoView();
-        }
-      }
-    }
+  });
 
-    /* ----------------------------------------------------------
-       THEME
-       ---------------------------------------------------------- */
-    function setTheme(theme) {
-      document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('reader-theme', theme);
-      document.querySelectorAll('.theme-button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.theme === theme);
-      });
-    }
+  tooltip.style.opacity = '1';
+  console.log('[setupProgressNav] Done.');
+}
 
-    /* ----------------------------------------------------------
-       PROGRESS NAV
-       ---------------------------------------------------------- */
-    function setupProgressNav() {
-      const nav = document.getElementById('progressNav');
-      const fill = document.getElementById('progressNavFill');
-      const tooltip = document.getElementById('progressNavTooltip');
-      const wordDisp = document.getElementById('wordDisplay');
+function updateProgressNav() {
+  if (state.words.length < 2) return;
+  const ratio = state.currentIndex / (state.words.length - 1);
+  const pct = ratio * 100;
+  document.getElementById('progressNavFill').style.height = pct + '%';
 
-      let isDragging = false;
-
-      function updateFromY(clientY) {
-        const rect = nav.getBoundingClientRect();
-        let ratio = 1 - (clientY - rect.top) / rect.height;
-        if (ratio < 0) ratio = 0;
-        if (ratio > 1) ratio = 1;
-
-        const i = Math.floor(ratio * (state.words.length - 1));
-        const safe = Math.max(0, Math.min(i, state.words.length - 1));
-
-        let pct = (safe / (state.words.length - 1)) * 100;
-        fill.style.height = pct + '%';
-
-        tooltip.innerHTML = `
-          <div>Word ${safe + 1} / ${state.words.length} (${Math.round(pct)}%)</div>
-          <div class="word-preview">${state.words[safe] || ''}</div>
-        `;
-        let tRect = tooltip.getBoundingClientRect();
-        let tY = clientY - tRect.height / 2;
-        let minY = rect.top;
-        let maxY = rect.bottom - tRect.height;
-        if (tY < minY) tY = minY;
-        if (tY > maxY) tY = maxY;
-        tooltip.style.top = tY + 'px';
-
-        // immediate visual feedback
-        wordDisp.textContent = state.words[safe];
-        return safe;
-      }
-
-      function onDragStart(e) {
-        isDragging = true;
-        if (state.isPlaying) pauseReading();
-        onDragMove(e);
-      }
-      function onDragMove(e) {
-        if (!isDragging) return;
-        e.preventDefault();
-        const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-        state.currentIndex = updateFromY(clientY);
-      }
-      function onDragEnd() {
-        if (!isDragging) return;
-        isDragging = false;
-        saveProgress(false);
-        if (state.contextViewActive) {
-          renderVisibleChunks();
-        }
-      }
-
-      // mouse
-      nav.addEventListener('mousedown', onDragStart);
-      document.addEventListener('mousemove', onDragMove);
-      document.addEventListener('mouseup', onDragEnd);
-
-      // touch
-      nav.addEventListener('touchstart', onDragStart, { passive: false });
-      document.addEventListener('touchmove', onDragMove, { passive: false });
-      document.addEventListener('touchend', onDragEnd);
-      document.addEventListener('touchcancel', onDragEnd);
-
-      // press "N" to toggle nav visibility
-      document.addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'n') {
-          let op = getComputedStyle(nav).opacity;
-          nav.style.opacity = (op === '1') ? '0' : '1';
-        }
-      });
-
-      // show tooltip by default since reading is initially paused
-      tooltip.style.opacity = '1';
-    }
-
-    function updateProgressNav() {
-      let ratio = 0;
-      if (state.words.length > 1) {
-        ratio = state.currentIndex / (state.words.length - 1);
-      }
-      let pct = ratio * 100;
-      document.getElementById('progressNavFill').style.height = pct + '%';
-      document.getElementById('wordNumber').textContent = state.currentIndex;
-      document.getElementById('totalWords').textContent = state.words.length;
-      document.getElementById('wordPreview').textContent = state.words[state.currentIndex] || '';
-    }
-  </script>
+  document.getElementById('wordNumber').textContent = (state.currentIndex + 1).toString();
+  document.getElementById('totalWords').textContent = state.words.length.toString();
+  document.getElementById('wordPreview').textContent =
+    state.words[state.currentIndex] || '';
+  // console.log(`[updateProgressNav] Updated fill to ${pct}%`);
+}
+</script>
 </body>
 </html>
