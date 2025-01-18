@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <!--
-    High-Performance Flash Reader
-    1) Single fetch of entire book text
-    2) Event delegation (no per-word listeners)
-    3) Single pass for chapters
-    4) Throttled saves
-    5) All the same features: speed reading, context view, chapters, undo, theme toggles, progress nav, etc.
+    Improved High-Performance Flash Reader
+    - Tokenization with punctuation
+    - Virtual scrolling in context view
+    - Additional shortcuts (arrow left/right, page up/down)
+    - Caching context view
+    - Mobile-friendly fixed overlay (no messing with body overflow)
 -->
 <html lang="en" data-theme="light">
 <head>
@@ -26,7 +26,6 @@
       --button-bg: rgba(255, 255, 255, 0.9);
       --button-hover: #ffffff;
     }
-
     html[data-theme="dark"] {
       --primary-color: #60a5fa;
       --text-color: #e5e7eb;
@@ -37,7 +36,6 @@
       --button-bg: rgba(31, 41, 55, 0.9);
       --button-hover: #374151;
     }
-
     html[data-theme="sand"] {
       --primary-color: #9c4221;
       --text-color: #442c1d;
@@ -55,10 +53,10 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg-color);
       color: var(--text-color);
-      overflow: hidden; /* We'll toggle overflow when context is open */
       height: 100vh;
       width: 100vw;
       transition: background-color 0.3s, color 0.3s;
+      overflow: hidden; /* We'll keep the main body pinned, the context is a fixed overlay. */
     }
 
     /* -----------------------------------------------------------
@@ -73,7 +71,6 @@
       gap: 8px;
       z-index: 10002;
     }
-
     .theme-buttons {
       display: flex;
       gap: 8px;
@@ -82,7 +79,6 @@
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
-
     .theme-button {
       padding: 8px 12px;
       border: none;
@@ -269,28 +265,19 @@
       transition: opacity 0.3s ease;
     }
 
-    .context-view.visible ~ .word-boundary {
-      display: none;
-    }
-
     /* -----------------------------------------------------------
-       CONTEXT VIEW (FULL TEXT)
+       CONTEXT VIEW - FIXED OVERLAY + VIRTUAL SCROLL
        ----------------------------------------------------------- */
     .context-view {
       position: fixed;
-      inset: 0;
+      top: 0; left: 0; right: 0; bottom: 0;
       background: var(--surface-color);
-      overflow-y: auto;
       visibility: hidden;
       opacity: 0;
       z-index: 9999;
-      -webkit-overflow-scrolling: touch;
-      height: 100vh;
-      width: 100vw;
       transition: opacity 0.3s ease, visibility 0.3s;
-      transform: translateZ(0);
-      -webkit-backface-visibility: hidden;
-      backface-visibility: hidden;
+      overflow-y: auto; /* we let this container scroll */
+      -webkit-overflow-scrolling: touch;
     }
     .context-view.visible {
       visibility: visible;
@@ -298,20 +285,25 @@
     }
 
     .context-header {
-      position: fixed;
+      position: sticky;
       top: 0;
-      left: 0;
-      right: 0;
-      height: 60px;
       background: var(--surface-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 16px;
-      z-index: 10000;
       border-bottom: 1px solid var(--progress-bg);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      z-index: 10000;
+      height: 60px;
     }
+    .chapters-dropdown {
+      position: relative;
+      margin-right: auto;
+      margin-left: 16px;
+    }
+    .chapters-button,
+    .context-undo,
     .context-close-button {
       padding: 8px 12px;
       background: var(--surface-color);
@@ -325,78 +317,16 @@
       gap: 8px;
       cursor: pointer;
       transition: all 0.2s ease;
-      margin-left: auto;
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
+    .chapters-button:active,
+    .context-undo:active,
     .context-close-button:active {
-      transform: scale(0.98);
-      background: var(--button-hover);
-    }
-    .context-content {
-      max-width: 800px;
-      margin: 0 auto;
-      line-height: 1.8;
-      font-size: 18px;
-      padding: 80px 20px 120px; /* space so content not hidden behind header */
-      position: relative;
-      background: var(--surface-color);
-      min-height: calc(100vh - 60px);
-      z-index: 9999;
-    }
-
-    .context-word {
-      cursor: pointer;
-      padding: 2px 4px;
-      border-radius: 4px;
-      transition: all 0.2s ease;
-      display: inline-block;
-      user-select: text;
-    }
-    .context-word:hover {
-      background: var(--progress-bg);
-      color: var(--primary-color);
-    }
-    .current-word {
-      font-weight: 600;
-      color: var(--primary-color);
-      background: var(--progress-bg);
-      padding: 2px 4px;
-      border-radius: 4px;
-      scroll-margin-top: 100px;
-    }
-
-    .context-view.visible ~ .progress-bar,
-    .context-view.visible ~ .progress-info,
-    .context-view.visible ~ .speed-control,
-    .context-view.visible ~ .wpm-indicator {
-      display: none;
-    }
-
-    /* CHAPTERS & UNDO */
-    .chapters-dropdown {
-      position: relative;
-      margin-right: auto;
-      margin-left: 16px;
-    }
-    .chapters-button {
-      padding: 8px 12px;
-      background: var(--surface-color);
-      border: 1px solid var(--progress-bg);
-      border-radius: 8px;
-      color: var(--text-color);
-      font-size: 14px;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .chapters-button:active {
       background: var(--button-hover);
       transform: scale(0.98);
     }
+
     .chapters-list {
       position: absolute;
       top: 100%;
@@ -445,23 +375,44 @@
       font-weight: 500;
     }
 
-    .context-undo {
-      padding: 8px 12px;
-      background: var(--surface-color);
-      border: 1px solid var(--progress-bg);
-      border-radius: 8px;
-      color: var(--text-color);
-      font-size: 14px;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    /* Virtual scroller container & chunk placeholders */
+    .context-content {
+      position: relative;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    /* The invisible spacer elements to simulate the full height */
+    .top-spacer,
+    .bottom-spacer {
+      height: 0;
+      width: 100%;
+    }
+
+    /* chunk container where we actually place the rendered text */
+    .chunks-container {
+      position: relative;
+      width: 100%;
+    }
+
+    .virtual-word {
       cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      display: inline-block;
+      user-select: text;
       transition: all 0.2s ease;
     }
-    .context-undo:active {
-      background: var(--button-hover);
-      transform: scale(0.98);
+    .virtual-word:hover {
+      background: var(--progress-bg);
+      color: var(--primary-color);
+    }
+    .current-word {
+      font-weight: 600;
+      color: var(--primary-color);
+      background: var(--progress-bg);
+      padding: 2px 4px;
+      border-radius: 4px;
+      scroll-margin-top: 100px;
     }
 
     .chapter-indicator {
@@ -474,9 +425,16 @@
       color: var(--primary-color);
       font-weight: 500;
       background: var(--surface-color);
-      position: sticky;
-      top: 60px;
-      z-index: 1001;
+      position: relative;
+    }
+
+    /* Hide theme toggle etc. behind the context overlay */
+    .context-view.visible ~ .progress-bar,
+    .context-view.visible ~ .progress-info,
+    .context-view.visible ~ .theme-toggle,
+    .context-view.visible ~ .speed-control,
+    .context-view.visible ~ .wpm-indicator {
+      display: none;
     }
 
     /* -----------------------------------------------------------
@@ -514,7 +472,7 @@
       width: 12px;
       background: var(--progress-bg);
       border-radius: 6px;
-      opacity: 1; /* always visible by default */
+      opacity: 1;
       cursor: pointer;
       z-index: 90;
     }
@@ -544,11 +502,6 @@
     .progress-nav-tooltip .word-preview {
       font-weight: 500;
       color: var(--primary-color);
-    }
-
-    /* Hide theme toggle in context view */
-    .context-view.visible ~ .theme-toggle {
-      display: none;
     }
 
     /* RESPONSIVE ADJUSTMENTS */
@@ -629,7 +582,7 @@
       </div>
     </div>
 
-    <!-- CONTEXT VIEW OVERLAY -->
+    <!-- CONTEXT VIEW OVERLAY (WITH VIRTUAL SCROLL) -->
     <div class="context-view" id="contextView">
       <div class="context-header">
         <div class="chapters-dropdown">
@@ -660,7 +613,10 @@
         </button>
       </div>
       <div class="context-content" id="contextContent">
-        <!-- entire book text inserted here -->
+        <!-- Virtual scrolling approach -->
+        <div class="top-spacer" id="topSpacer"></div>
+        <div class="chunks-container" id="chunksContainer"></div>
+        <div class="bottom-spacer" id="bottomSpacer"></div>
       </div>
     </div>
 
@@ -693,15 +649,22 @@
       // user settings
       currentWPM: parseInt(localStorage.getItem('reader-wpm')) || 300,
       readingInterval: null,
-      minWPM: 25,
-      maxWPM: 1500,
+      minWPM: 100,
+      maxWPM: 600,
 
       // context view
       contextViewActive: false,
       wasPlayingBeforeContext: false,
 
       // throttle saving
-      saveTimeout: null
+      saveTimeout: null,
+
+      /* Virtual Scrolling */
+      chunkSize: 500, // words per chunk
+      chunkedData: [], // array of { startIndex, html, approximateHeight }
+      chunkHeightEstimate: 600, // px estimate for chunk (refined later)
+      topPadding: 0, // space above the rendered chunks
+      bottomPadding: 0
     };
 
     /* ----------------------------------------------------------
@@ -712,9 +675,7 @@
 
       // Save progress if user leaves
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-          saveProgress(true); // immediate
-        }
+        if (document.hidden) saveProgress(true);
       });
       window.addEventListener('beforeunload', () => {
         saveProgress(true);
@@ -725,10 +686,14 @@
       try {
         const resp = await fetch(`/api/book/{{ book.id }}/content`);
         if (!resp.ok) throw new Error('Failed to fetch book content');
-
         const data = await resp.json();
-        // parse words
-        state.words = data.content.split(/\s+/).filter(w => w.length > 0);
+
+        // More robust tokenization: separate words & punctuation
+        let content = data.content || '';
+        // Example regex that captures words/punctuation/symbols
+        let tokens = content.match(/\w+|\S/g) || [];
+
+        state.words = tokens;
         // set initial position
         if (data.current_position && !isNaN(data.current_position)) {
           let pos = parseInt(data.current_position, 10);
@@ -741,6 +706,9 @@
           state.chapters = data.chapters;
         }
 
+        // Prepare chunked data for virtual scrolling
+        buildChunkData();
+
         updateAllUI();
         setupEventListeners();
         setupProgressNav();
@@ -750,27 +718,109 @@
     }
 
     /* ----------------------------------------------------------
+       BUILD CHUNK DATA FOR VIRTUAL SCROLL
+       ---------------------------------------------------------- */
+    function buildChunkData() {
+      // chunk the words
+      state.chunkedData = [];
+      for (let i = 0; i < state.words.length; i += state.chunkSize) {
+        let startIndex = i;
+        let endIndex = Math.min(i + state.chunkSize, state.words.length);
+        // We'll just store the raw slice (HTML is built on-demand or cached).
+        const slice = state.words.slice(startIndex, endIndex);
+        // approximate chunk HTML
+        // We'll do an initial build w/o the highlight
+        let chunkHTML = buildChunkHTML(slice, startIndex, false);
+        // store
+        state.chunkedData.push({
+          startIndex,
+          endIndex,
+          html: chunkHTML,
+          approximateHeight: state.chunkHeightEstimate // refined if needed
+        });
+      }
+      estimateChunkHeights();
+    }
+
+    // Build HTML string for a given slice of words
+    // Optionally highlight the current word if it falls in [start, end).
+    function buildChunkHTML(wordArray, offset, highlightCurrent = true) {
+      let html = '';
+      let chapterIndex = getChapterIndexForWord(offset);
+      let nextChapterPos = (chapterIndex < state.chapters.length)
+        ? state.chapters[chapterIndex].position
+        : -1;
+      let chapterTitle = (chapterIndex < state.chapters.length)
+        ? state.chapters[chapterIndex].title
+        : null;
+
+      for (let i = 0; i < wordArray.length; i++) {
+        let globalIndex = offset + i;
+
+        // check if we've hit next chapter
+        if (chapterIndex < state.chapters.length && globalIndex === nextChapterPos) {
+          html += `<div class="chapter-indicator">${chapterTitle}</div>`;
+          chapterIndex++;
+          if (chapterIndex < state.chapters.length) {
+            nextChapterPos = state.chapters[chapterIndex].position;
+            chapterTitle = state.chapters[chapterIndex].title;
+          } else {
+            nextChapterPos = -1;
+          }
+        }
+
+        let classes = 'virtual-word';
+        if (highlightCurrent && globalIndex === state.currentIndex) {
+          classes = 'current-word';
+        }
+        html += `<span class="${classes}" data-index="${globalIndex}">${wordArray[i]}</span> `;
+      }
+      return html;
+    }
+
+    // Roughly measure the first chunk to refine chunkHeightEstimate
+    function estimateChunkHeights() {
+      let tmpContainer = document.createElement('div');
+      tmpContainer.style.position = 'absolute';
+      tmpContainer.style.visibility = 'hidden';
+      tmpContainer.style.width = '600px'; // approximate reading width
+      tmpContainer.innerHTML = state.chunkedData[0]?.html || '';
+      document.body.appendChild(tmpContainer);
+
+      let measuredHeight = tmpContainer.offsetHeight;
+      document.body.removeChild(tmpContainer);
+
+      if (measuredHeight > 0) {
+        // scale up for how many words are in chunk 0
+        let chunkWordCount = Math.min(state.chunkSize, state.words.length);
+        // We'll estimate px per word
+        let pxPerWord = measuredHeight / chunkWordCount;
+        // Then apply that to all chunks
+        state.chunkHeightEstimate = pxPerWord * state.chunkSize;
+        state.chunkedData.forEach(chunk => {
+          let chunkLen = chunk.endIndex - chunk.startIndex;
+          chunk.approximateHeight = pxPerWord * chunkLen;
+        });
+      }
+    }
+
+    /* ----------------------------------------------------------
        UPDATE UI
        ---------------------------------------------------------- */
     function updateAllUI() {
-      // show current word in the center
       const display = document.getElementById('wordDisplay');
       display.textContent = state.words[state.currentIndex] || '';
-
-      // update progress bar & nav
+      // progress
       updateProgress();
       updateProgressNav();
-
-      // update top WPM
+      // wpm top
       document.getElementById('wpmValueTop').textContent = state.currentWPM;
-
-      // possibly show chapter # if desired
+      // chapter info
       const c = findChapterForIndex(state.currentIndex);
       if (c) {
         document.getElementById('chapterNumber').textContent = c.title;
       }
-
-      // throttle the saving (less frequent)
+      // throttle save
       saveProgress(false);
     }
 
@@ -778,7 +828,6 @@
        EVENT LISTENERS
        ---------------------------------------------------------- */
     function setupEventListeners() {
-      // main word boundary => tap to play/pause
       const wb = document.getElementById('wordBoundary');
       wb.addEventListener('click', () => {
         if (!state.contextViewActive) {
@@ -786,17 +835,39 @@
         }
       });
 
-      // keyboard (space -> toggle, arrow up/down -> WPM)
+      // Additional keyboard shortcuts
       document.addEventListener('keydown', (e) => {
-        if (e.code === 'Space') {
-          e.preventDefault();
-          toggleReading();
-        } else if (e.code === 'ArrowUp') {
-          e.preventDefault();
-          updateWPM(state.currentWPM + 25);
-        } else if (e.code === 'ArrowDown') {
-          e.preventDefault();
-          updateWPM(state.currentWPM - 25);
+        switch(e.code) {
+          case 'Space':
+            e.preventDefault();
+            toggleReading();
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            updateWPM(state.currentWPM + 25);
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            updateWPM(state.currentWPM - 25);
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            jumpWords(-10); // jump back 10 words
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            jumpWords(10); // jump forward 10 words
+            break;
+          case 'PageUp':
+            e.preventDefault();
+            jumpWords(-100);
+            break;
+          case 'PageDown':
+            e.preventDefault();
+            jumpWords(100);
+            break;
+          default:
+            break;
         }
       });
 
@@ -811,20 +882,43 @@
       const savedTheme = localStorage.getItem('reader-theme') || 'light';
       setTheme(savedTheme);
 
-      // context content => single delegated click for words
-      document.getElementById('contextContent').addEventListener('click', (e) => {
-        if (e.target.classList.contains('context-word') || e.target.classList.contains('current-word')) {
+      // Virtual scroll event in context content
+      const contextEl = document.getElementById('contextContent');
+      contextEl.addEventListener('scroll', onContextScroll);
+
+      // Delegated click for words in the chunks container
+      const chunksContainer = document.getElementById('chunksContainer');
+      chunksContainer.addEventListener('click', (e) => {
+        if (e.target.matches('.virtual-word') || e.target.matches('.current-word')) {
           const i = parseInt(e.target.dataset.index, 10);
           if (!isNaN(i)) {
             pushToUndoStack(state.currentIndex);
             state.currentIndex = i;
             updateAllUI();
-            generateContextHTML();
+            // We'll re-render the visible chunks with highlight
+            renderVisibleChunks();
             scrollCurrentWordIntoView();
-            showPositionIndicator();
           }
         }
       });
+    }
+
+    /* Jump words by offset (arrow/page keys) */
+    function jumpWords(offset) {
+      let newIndex = state.currentIndex + offset;
+      newIndex = Math.max(0, Math.min(newIndex, state.words.length - 1));
+      pushToUndoStack(state.currentIndex);
+      state.currentIndex = newIndex;
+      updateAllUI();
+
+      if (state.isPlaying) {
+        pauseReading();
+        startReading(); // re-start interval
+      }
+      if (state.contextViewActive) {
+        renderVisibleChunks();
+        scrollCurrentWordIntoView();
+      }
     }
 
     /* ----------------------------------------------------------
@@ -841,9 +935,8 @@
     }
 
     function startReading() {
-      pauseReading(); // ensure no duplicates
+      pauseReading();
       state.isPlaying = true;
-
       const intervalMS = calculateInterval(state.currentWPM);
       const disp = document.getElementById('wordDisplay');
       disp.textContent = state.words[state.currentIndex] || '';
@@ -890,8 +983,6 @@
        SAVE PROGRESS (THROTTLED)
        ---------------------------------------------------------- */
     function saveProgress(immediate = false) {
-      // immediate => do it right now (on unload, etc.)
-      // otherwise, wait a bit to avoid spamming the server
       if (immediate) {
         doSaveProgress();
         return;
@@ -901,12 +992,9 @@
         doSaveProgress();
       }, 2000);
     }
-
     async function doSaveProgress() {
-      // local fallback
       localStorage.setItem('reader-wpm', state.currentWPM);
       localStorage.setItem(`book-{{ book.id }}-position`, state.currentIndex);
-
       try {
         await fetch(`/api/book/{{ book.id }}/position`, {
           method: 'POST',
@@ -948,7 +1036,7 @@
     }
 
     /* ----------------------------------------------------------
-       CONTEXT VIEW
+       CONTEXT VIEW - OPEN/CLOSE
        ---------------------------------------------------------- */
     function toggleContextView() {
       if (state.contextViewActive) {
@@ -961,15 +1049,15 @@
     function showContextView() {
       state.wasPlayingBeforeContext = state.isPlaying;
       if (state.isPlaying) pauseReading();
-
       state.contextViewActive = true;
-      document.body.style.overflow = 'hidden';
-      generateContextHTML();
+
+      // Refresh the visible chunks so we highlight the correct word
+      renderVisibleChunks();
 
       const cv = document.getElementById('contextView');
       cv.classList.add('visible');
 
-      // scroll current word into view
+      // scroll the current word into view
       requestAnimationFrame(() => {
         scrollCurrentWordIntoView(false);
       });
@@ -988,18 +1076,15 @@
 
     function hideContextView() {
       state.contextViewActive = false;
-      document.body.style.overflow = '';
-
       const cv = document.getElementById('contextView');
       cv.classList.remove('visible');
 
-      // if was playing, resume
       if (state.wasPlayingBeforeContext) {
         startReading();
       }
       state.wasPlayingBeforeContext = false;
 
-      // update single word display
+      // single word display
       document.getElementById('wordDisplay').textContent =
         state.words[state.currentIndex] || '';
 
@@ -1015,56 +1100,96 @@
       `;
     }
 
-    function generateContextHTML() {
+    /* ----------------------------------------------------------
+       VIRTUAL SCROLLING CORE
+       ---------------------------------------------------------- */
+    function onContextScroll() {
+      renderVisibleChunks();
+    }
+
+    function renderVisibleChunks() {
       const container = document.getElementById('contextContent');
-      container.innerHTML = '';
+      const scrollTop = container.scrollTop;
+      const viewHeight = container.clientHeight;
 
-      let html = '';
-      let chapterIndex = 0;
-      let nextChapterPos = state.chapters.length > 0 ? state.chapters[0].position : -1;
-      let chapterTitle = state.chapters.length > 0 ? state.chapters[0].title : null;
+      let startPos = 0;
+      let accumulatedHeight = 0;
+      let endPos = 0;
 
-      // single loop to build text with chapter markers
-      for (let i = 0; i < state.words.length; i++) {
-        if (i === nextChapterPos) {
-          // insert chapter indicator
-          html += `<div class="chapter-indicator">${chapterTitle}</div>`;
-
-          // move to next chapter
-          chapterIndex++;
-          if (chapterIndex < state.chapters.length) {
-            nextChapterPos = state.chapters[chapterIndex].position;
-            chapterTitle = state.chapters[chapterIndex].title;
-          } else {
-            nextChapterPos = -1;
-          }
+      // Figure out which chunks to show:
+      // We'll accumulate chunkHeights until we exceed scrollTop for start
+      let startIndexChunk = 0;
+      for (let i = 0; i < state.chunkedData.length; i++) {
+        if (accumulatedHeight + state.chunkedData[i].approximateHeight > scrollTop) {
+          startIndexChunk = i;
+          break;
         }
-        const cls = (i === state.currentIndex) ? 'current-word' : 'context-word';
-        html += `<span class="${cls}" data-index="${i}">${state.words[i]}</span> `;
+        accumulatedHeight += state.chunkedData[i].approximateHeight;
       }
 
-      container.innerHTML = html;
+      // We have the chunk where scrollTop lies
+      // now we gather enough chunks until we cover viewHeight
+      let visibleChunks = [];
+      let visibleHeight = 0;
+      let j = startIndexChunk;
+      while (j < state.chunkedData.length && visibleHeight < viewHeight * 1.5) {
+        visibleChunks.push(state.chunkedData[j]);
+        visibleHeight += state.chunkedData[j].approximateHeight;
+        j++;
+      }
+
+      // The top spacer is everything above startIndexChunk
+      state.topPadding = accumulatedHeight;
+      // The bottom spacer is everything from j to the end
+      let bottomAccum = 0;
+      for (let k = j; k < state.chunkedData.length; k++) {
+        bottomAccum += state.chunkedData[k].approximateHeight;
+      }
+      state.bottomPadding = bottomAccum;
+
+      // Rebuild the chunk HTML (with highlight)
+      // We'll only do it if needed or for simplicity do it each time
+      let finalHTML = '';
+      visibleChunks.forEach(chunk => {
+        let highlight = (state.currentIndex >= chunk.startIndex && state.currentIndex < chunk.endIndex);
+        if (highlight) {
+          // re-generate chunk HTML with highlight
+          chunk.html = buildChunkHTML(
+            state.words.slice(chunk.startIndex, chunk.endIndex),
+            chunk.startIndex,
+            true
+          );
+        } else {
+          // If there's no potential highlight, keep the existing cached chunk.html
+          // (We could still re-check chapter boundaries, but let's keep it simple.)
+        }
+        finalHTML += `<div data-chunk-start="${chunk.startIndex}">${chunk.html}</div>`;
+      });
+
+      const chunksContainer = document.getElementById('chunksContainer');
+      chunksContainer.innerHTML = finalHTML;
+      document.getElementById('topSpacer').style.height = state.topPadding + 'px';
+      document.getElementById('bottomSpacer').style.height = state.bottomPadding + 'px';
     }
 
     function scrollCurrentWordIntoView(smooth = true) {
-      const cw = document.querySelector('.current-word');
-      if (cw) {
-        cw.scrollIntoView({
-          behavior: smooth ? 'smooth' : 'auto',
-          block: 'center'
-        });
-      }
-    }
+      // find which chunk the current index is in
+      let chunkIndex = state.chunkedData.findIndex(ch =>
+        (state.currentIndex >= ch.startIndex && state.currentIndex < ch.endIndex)
+      );
+      if (chunkIndex < 0) return;
 
-    /* position indicator if you want a small ephemeral popup */
-    function showPositionIndicator() {
-      // If you have an element with id="positionIndicator", you can do:
-      // const el = document.getElementById('positionIndicator');
-      // if (el) {
-      //   el.classList.add('visible');
-      //   setTimeout(() => el.classList.remove('visible'), 2000);
-      // }
-      // For now, do nothing or implement a small toast.
+      // sum the heights of all preceding chunks
+      let offsetAbove = 0;
+      for (let i = 0; i < chunkIndex; i++) {
+        offsetAbove += state.chunkedData[i].approximateHeight;
+      }
+      // We'll just scroll to that approximate position
+      const container = document.getElementById('contextContent');
+      container.scrollTo({
+        top: offsetAbove,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
     }
 
     /* ----------------------------------------------------------
@@ -1088,16 +1213,13 @@
           ? state.chapters[i + 1].position
           : state.words.length;
 
-        // are we currently in this chapter?
         let inThisChapter = (state.currentIndex >= chap.position && state.currentIndex < nextPos);
-
         let progress = 0;
         if (inThisChapter) {
           let chapterSize = nextPos - chap.position;
           let offset = state.currentIndex - chap.position;
           progress = Math.round((offset / chapterSize) * 100);
         } else if (state.currentIndex >= nextPos) {
-          // fully past
           progress = 100;
         }
 
@@ -1116,14 +1238,12 @@
       pushToUndoStack(state.currentIndex);
       state.currentIndex = pos;
       updateAllUI();
-      generateContextHTML();
+      renderVisibleChunks();
       scrollCurrentWordIntoView();
-      showPositionIndicator();
       document.getElementById('chaptersList').classList.remove('visible');
     }
 
     function findChapterForIndex(idx) {
-      // do a quick loop or binary search. For simplicity:
       for (let i = 0; i < state.chapters.length; i++) {
         const chap = state.chapters[i];
         const nextPos = (i < state.chapters.length - 1) ? state.chapters[i + 1].position : state.words.length;
@@ -1132,6 +1252,20 @@
         }
       }
       return null;
+    }
+
+    // helper: which chapter index are we currently in (for building chunk HTML)
+    function getChapterIndexForWord(globalIndex) {
+      // simple linear search
+      let cIndex = 0;
+      for (let i = 0; i < state.chapters.length; i++) {
+        let nextPos = (i < state.chapters.length - 1) ? state.chapters[i+1].position : state.words.length;
+        if (globalIndex >= state.chapters[i].position && globalIndex < nextPos) {
+          cIndex = i;
+          break;
+        }
+      }
+      return cIndex;
     }
 
     /* ----------------------------------------------------------
@@ -1149,7 +1283,7 @@
         state.currentIndex = last;
         updateAllUI();
         if (state.contextViewActive) {
-          generateContextHTML();
+          renderVisibleChunks();
           scrollCurrentWordIntoView();
         }
       }
@@ -1221,6 +1355,9 @@
         if (!isDragging) return;
         isDragging = false;
         saveProgress(false);
+        if (state.contextViewActive) {
+          renderVisibleChunks();
+        }
       }
 
       // mouse
@@ -1234,7 +1371,7 @@
       document.addEventListener('touchend', onDragEnd);
       document.addEventListener('touchcancel', onDragEnd);
 
-      // press "N" to toggle
+      // press "N" to toggle nav visibility
       document.addEventListener('keydown', (e) => {
         if (e.key.toLowerCase() === 'n') {
           let op = getComputedStyle(nav).opacity;
