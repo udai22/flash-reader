@@ -1,25 +1,21 @@
 <!DOCTYPE html>
 <!--
-    Flash Reader - Simplified, Stable Reading Interface
-    - Single content load (no partial/infinite loading)
-    - Speed reading with adjustable WPM
-    - Context view with entire text shown
-    - Chapter navigation + Undo
-    - Theme customization (light/dark/sand)
-    - Progress tracking + vertical progress nav
-    - Simple, explicit interactions (tap/click, no pinch)
-    - Desktop & mobile friendly
+    High-Performance Flash Reader
+    1) Single fetch of entire book text
+    2) Event delegation (no per-word listeners)
+    3) Single pass for chapters
+    4) Throttled saves
+    5) All the same features: speed reading, context view, chapters, undo, theme toggles, progress nav, etc.
 -->
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ book.title }} - Flash Reader</title>
-
   <style>
-    /* ------------------------------------------------------
+    /* -----------------------------------------------------------
        THEME VARIABLES
-       ------------------------------------------------------ */
+       ----------------------------------------------------------- */
     html[data-theme="light"] {
       --primary-color: #2563eb;
       --text-color: #1f2937;
@@ -59,15 +55,15 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg-color);
       color: var(--text-color);
-      overflow: hidden; /* We'll manage overflow for the context view */
+      overflow: hidden; /* We'll toggle overflow when context is open */
       height: 100vh;
       width: 100vw;
       transition: background-color 0.3s, color 0.3s;
     }
 
-    /* ------------------------------------------------------
-       THEME TOGGLE & WPM CONTROLS (TOP RIGHT)
-       ------------------------------------------------------ */
+    /* -----------------------------------------------------------
+       THEME TOGGLE & WPM CONTROLS
+       ----------------------------------------------------------- */
     .theme-toggle {
       position: fixed;
       right: 16px;
@@ -97,12 +93,10 @@
       font-size: 14px;
       transition: background-color 0.2s;
     }
-
     .theme-button.active {
       background: var(--primary-color);
-      color: white;
+      color: #fff;
     }
-
     .theme-button:hover:not(.active) {
       background: var(--button-hover);
     }
@@ -116,7 +110,6 @@
       align-items: center;
       gap: 12px;
     }
-
     .wpm-controls button {
       width: 44px;
       height: 44px;
@@ -129,12 +122,9 @@
       align-items: center;
       justify-content: center;
       transition: all 0.2s ease;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
       position: relative;
       padding: 0;
     }
-
     .wpm-controls button svg {
       width: 20px;
       height: 20px;
@@ -144,13 +134,11 @@
       top: 50%;
       transform: translate(-50%, -50%);
     }
-
     .wpm-controls button:active {
       background: var(--primary-color);
-      color: white;
+      color: #fff;
       transform: scale(0.95);
     }
-
     .wpm-controls .wpm-value {
       padding: 0 8px;
       font-weight: 600;
@@ -161,9 +149,6 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* ------------------------------------------------------
-       CONTEXT MODE BUTTON (IN THEME TOGGLE)
-       ------------------------------------------------------ */
     .context-mode-button {
       margin-top: 8px;
       width: 100%;
@@ -187,13 +172,13 @@
     }
     .context-mode-button.active {
       background: var(--primary-color);
-      color: white;
+      color: #fff;
       border-color: var(--primary-color);
     }
 
-    /* ------------------------------------------------------
+    /* -----------------------------------------------------------
        READER CONTAINER
-       ------------------------------------------------------ */
+       ----------------------------------------------------------- */
     .reader-container {
       position: relative;
       width: 100%;
@@ -218,12 +203,12 @@
       z-index: 100;
     }
     .back-button:hover {
-      background: white;
+      background: #fff;
     }
 
-    /* ------------------------------------------------------
-       PROGRESS BAR (LEFT SIDE)
-       ------------------------------------------------------ */
+    /* -----------------------------------------------------------
+       PROGRESS BAR (LEFT)
+       ----------------------------------------------------------- */
     .progress-bar {
       position: fixed;
       left: 0;
@@ -231,7 +216,7 @@
       bottom: 0;
       width: 4px;
       background: var(--progress-bg);
-      opacity: 0; /* becomes visible if desired */
+      opacity: 0;
       transition: opacity 0.3s;
     }
     .progress-bar.visible {
@@ -260,9 +245,9 @@
       opacity: 1;
     }
 
-    /* ------------------------------------------------------
+    /* -----------------------------------------------------------
        WORD DISPLAY (CENTER)
-       ------------------------------------------------------ */
+       ----------------------------------------------------------- */
     .word-boundary {
       position: relative;
       padding: 40px;
@@ -275,9 +260,7 @@
       transform: translateZ(0);
       -webkit-backface-visibility: hidden;
       backface-visibility: hidden;
-      will-change: transform;
     }
-
     .word-display {
       font-size: 36px;
       font-weight: 500;
@@ -286,14 +269,13 @@
       transition: opacity 0.3s ease;
     }
 
-    /* Hide the single-word view if context is open */
     .context-view.visible ~ .word-boundary {
       display: none;
     }
 
-    /* ------------------------------------------------------
+    /* -----------------------------------------------------------
        CONTEXT VIEW (FULL TEXT)
-       ------------------------------------------------------ */
+       ----------------------------------------------------------- */
     .context-view {
       position: fixed;
       inset: 0;
@@ -315,15 +297,6 @@
       opacity: 1;
     }
 
-    /* When context is open, hide top UI items except the header inside context */
-    .context-view.visible ~ .progress-bar,
-    .context-view.visible ~ .progress-info,
-    .context-view.visible ~ .speed-control,
-    .context-view.visible ~ .wpm-indicator {
-      display: none;
-    }
-
-    /* CONTEXT HEADER */
     .context-header {
       position: fixed;
       top: 0;
@@ -339,7 +312,6 @@
       border-bottom: 1px solid var(--progress-bg);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
-
     .context-close-button {
       padding: 8px 12px;
       background: var(--surface-color);
@@ -361,20 +333,18 @@
       transform: scale(0.98);
       background: var(--button-hover);
     }
-
     .context-content {
       max-width: 800px;
       margin: 0 auto;
       line-height: 1.8;
       font-size: 18px;
-      padding: 80px 20px 120px; /* enough top/bottom space for comfortable reading */
+      padding: 80px 20px 120px; /* space so content not hidden behind header */
       position: relative;
       background: var(--surface-color);
       min-height: calc(100vh - 60px);
       z-index: 9999;
     }
 
-    /* Words in context */
     .context-word {
       cursor: pointer;
       padding: 2px 4px;
@@ -387,9 +357,7 @@
       background: var(--progress-bg);
       color: var(--primary-color);
     }
-
-    /* Current word highlight */
-    .context-content .current-word {
+    .current-word {
       font-weight: 600;
       color: var(--primary-color);
       background: var(--progress-bg);
@@ -398,15 +366,19 @@
       scroll-margin-top: 100px;
     }
 
-    /* ------------------------------------------------------
-       CHAPTERS & UNDO
-       ------------------------------------------------------ */
+    .context-view.visible ~ .progress-bar,
+    .context-view.visible ~ .progress-info,
+    .context-view.visible ~ .speed-control,
+    .context-view.visible ~ .wpm-indicator {
+      display: none;
+    }
+
+    /* CHAPTERS & UNDO */
     .chapters-dropdown {
       position: relative;
       margin-right: auto;
       margin-left: 16px;
     }
-
     .chapters-button {
       padding: 8px 12px;
       background: var(--surface-color);
@@ -425,7 +397,6 @@
       background: var(--button-hover);
       transform: scale(0.98);
     }
-
     .chapters-list {
       position: absolute;
       top: 100%;
@@ -449,7 +420,6 @@
       pointer-events: auto;
       transform: translateY(0);
     }
-
     .chapter-item {
       padding: 12px;
       border-radius: 8px;
@@ -475,21 +445,6 @@
       font-weight: 500;
     }
 
-    .chapter-indicator {
-      display: block;
-      text-align: center;
-      padding: 20px 0;
-      margin: 20px 0;
-      border-top: 1px solid var(--progress-bg);
-      border-bottom: 1px solid var(--progress-bg);
-      color: var(--primary-color);
-      font-weight: 500;
-      background: var(--surface-color);
-      position: sticky;
-      top: 60px; /* to remain visible below the header */
-      z-index: 1001;
-    }
-
     .context-undo {
       padding: 8px 12px;
       background: var(--surface-color);
@@ -509,9 +464,24 @@
       transform: scale(0.98);
     }
 
-    /* ------------------------------------------------------
-       WPM INDICATOR (FLOATING)
-       ------------------------------------------------------ */
+    .chapter-indicator {
+      display: block;
+      text-align: center;
+      padding: 20px 0;
+      margin: 20px 0;
+      border-top: 1px solid var(--progress-bg);
+      border-bottom: 1px solid var(--progress-bg);
+      color: var(--primary-color);
+      font-weight: 500;
+      background: var(--surface-color);
+      position: sticky;
+      top: 60px;
+      z-index: 1001;
+    }
+
+    /* -----------------------------------------------------------
+       WPM INDICATOR
+       ----------------------------------------------------------- */
     .wpm-indicator {
       position: fixed;
       right: 16px;
@@ -533,9 +503,9 @@
       transform: translateY(0);
     }
 
-    /* ------------------------------------------------------
-       PROGRESS NAV (RIGHT SIDE SLIDER)
-       ------------------------------------------------------ */
+    /* -----------------------------------------------------------
+       PROGRESS NAV (RIGHT SLIDER)
+       ----------------------------------------------------------- */
     .progress-nav {
       position: fixed;
       right: 24px;
@@ -557,7 +527,6 @@
       border-radius: 4px;
       transition: height 0.1s;
     }
-
     .progress-nav-tooltip {
       position: absolute;
       right: 24px;
@@ -608,25 +577,22 @@
   </style>
 </head>
 <body>
-  <!-- Main Reader Container -->
   <div class="reader-container">
-    <!-- Back Button -->
+
+    <!-- BACK BUTTON -->
     <button class="back-button" onclick="window.location.href='/'">← Back</button>
 
-    <!-- Theme / WPM Controls (top-right) -->
+    <!-- THEME & WPM CONTROLS (TOP RIGHT) -->
     <div class="theme-toggle">
-      <!-- Theme Buttons -->
       <div class="theme-buttons">
         <button class="theme-button active" data-theme="light">Light</button>
         <button class="theme-button" data-theme="dark">Dark</button>
         <button class="theme-button" data-theme="sand">Sand</button>
       </div>
-
-      <!-- WPM Controls -->
       <div class="wpm-controls">
         <button onclick="updateWPM(state.currentWPM - 25)" title="Decrease WPM">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7-7-7" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7-7-7"/>
           </svg>
         </button>
         <div class="wpm-value">
@@ -634,12 +600,10 @@
         </div>
         <button onclick="updateWPM(state.currentWPM + 25)" title="Increase WPM">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7 7 7" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7 7 7"/>
           </svg>
         </button>
       </div>
-
-      <!-- Context View Toggle -->
       <button class="context-mode-button" id="contextModeButton" onclick="toggleContextView()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -648,7 +612,7 @@
       </button>
     </div>
 
-    <!-- Progress Bar (left side) -->
+    <!-- PROGRESS BAR (LEFT) -->
     <div class="progress-bar" id="progressBar">
       <div class="progress-fill" id="progressFill"></div>
     </div>
@@ -658,31 +622,31 @@
       <div><span id="progressPercent">0</span>%</div>
     </div>
 
-    <!-- Single Word Display -->
+    <!-- SINGLE WORD DISPLAY -->
     <div class="word-boundary" id="wordBoundary">
       <div class="word-display" id="wordDisplay">
         Tap to start reading
       </div>
     </div>
 
-    <!-- Context View Overlay -->
+    <!-- CONTEXT VIEW OVERLAY -->
     <div class="context-view" id="contextView">
       <div class="context-header">
         <div class="chapters-dropdown">
           <button class="chapters-button" onclick="toggleChaptersList()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
             Chapters
           </button>
           <div class="chapters-list" id="chaptersList"></div>
         </div>
 
-        <!-- Context Undo & Close Buttons -->
         <button class="context-undo" onclick="undoLastPosition()" style="margin-right: 16px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M3 10h10a8 8 0 018 8v2M3 10l6 6M3 10l6-6" />
+                  d="M3 10h10a8 8 0 018 8v2M3 10l6 6M3 10l6-6"/>
           </svg>
           Undo
         </button>
@@ -695,16 +659,17 @@
           Close
         </button>
       </div>
-
-      <div class="context-content" id="contextContent"><!-- full text goes here --></div>
+      <div class="context-content" id="contextContent">
+        <!-- entire book text inserted here -->
+      </div>
     </div>
 
-    <!-- WPM Indicator (floats in/out briefly) -->
+    <!-- WPM INDICATOR -->
     <div class="wpm-indicator" id="wpmIndicator">
       <span id="wpmIndicatorValue">300</span> WPM
     </div>
 
-    <!-- Progress Navigation (right side) -->
+    <!-- PROGRESS NAV (RIGHT) -->
     <div class="progress-nav" id="progressNav">
       <div class="progress-nav-fill" id="progressNavFill"></div>
       <div class="progress-nav-tooltip" id="progressNavTooltip">
@@ -715,9 +680,9 @@
   </div>
 
   <script>
-    /* ------------------------------------------------------
+    /* ----------------------------------------------------------
        GLOBAL STATE
-       ------------------------------------------------------ */
+       ---------------------------------------------------------- */
     let state = {
       isPlaying: false,
       currentIndex: 0,
@@ -725,44 +690,53 @@
       chapters: [],
       undoStack: [],
 
+      // user settings
       currentWPM: parseInt(localStorage.getItem('reader-wpm')) || 300,
       readingInterval: null,
-
-      wasPlayingBeforeContext: false,
-      contextViewActive: false,
-
-      // for progress display
-      chapter: 1,
-      page: 1,
-
-      // basic references
       minWPM: 25,
-      maxWPM: 1500
+      maxWPM: 1500,
+
+      // context view
+      contextViewActive: false,
+      wasPlayingBeforeContext: false,
+
+      // throttle saving
+      saveTimeout: null
     };
 
-    /* ------------------------------------------------------
-       INITIALIZE (Fetch entire text)
-       ------------------------------------------------------ */
+    /* ----------------------------------------------------------
+       INITIALIZE ON DOM READY
+       ---------------------------------------------------------- */
+    document.addEventListener('DOMContentLoaded', () => {
+      initialize();
+
+      // Save progress if user leaves
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          saveProgress(true); // immediate
+        }
+      });
+      window.addEventListener('beforeunload', () => {
+        saveProgress(true);
+      });
+    });
+
     async function initialize() {
       try {
-        // Example endpoint: /api/book/{{ book.id }}/content
-        // Expects JSON with { content: "...", current_position: x, chapters: [...] }
-        const response = await fetch(`/api/book/{{ book.id }}/content`);
-        if (!response.ok) throw new Error('Failed to load book content.');
+        const resp = await fetch(`/api/book/{{ book.id }}/content`);
+        if (!resp.ok) throw new Error('Failed to fetch book content');
 
-        const data = await response.json();
-        // Store full text in memory:
-        state.words = data.content
-          .split(/\s+/)
-          .filter((w) => w.length > 0);
-
-        // If there's a server-saved position, jump there
-        let serverPos = parseInt(data.current_position || 0);
-        if (!isNaN(serverPos) && serverPos < state.words.length) {
-          state.currentIndex = serverPos;
+        const data = await resp.json();
+        // parse words
+        state.words = data.content.split(/\s+/).filter(w => w.length > 0);
+        // set initial position
+        if (data.current_position && !isNaN(data.current_position)) {
+          let pos = parseInt(data.current_position, 10);
+          if (pos >= 0 && pos < state.words.length) {
+            state.currentIndex = pos;
+          }
         }
-
-        // Chapters (optional)
+        // chapters
         if (data.chapters) {
           state.chapters = data.chapters;
         }
@@ -775,81 +749,90 @@
       }
     }
 
-    /* ------------------------------------------------------
-       UPDATE ALL UI
-       ------------------------------------------------------ */
+    /* ----------------------------------------------------------
+       UPDATE UI
+       ---------------------------------------------------------- */
     function updateAllUI() {
-      // Update main word display
-      let word = state.words[state.currentIndex] || ' ';
-      document.getElementById('wordDisplay').textContent = word;
+      // show current word in the center
+      const display = document.getElementById('wordDisplay');
+      display.textContent = state.words[state.currentIndex] || '';
 
-      // Update progress
+      // update progress bar & nav
       updateProgress();
       updateProgressNav();
 
-      // Possibly show chapter info if known
-      const chapterObj = getCurrentChapter();
-      if (chapterObj) {
-        document.getElementById('chapterNumber').textContent = chapterObj.title || '';
-      }
-
-      // Ensure WPM top display is correct
+      // update top WPM
       document.getElementById('wpmValueTop').textContent = state.currentWPM;
 
-      // Save progress
-      saveProgress();
+      // possibly show chapter # if desired
+      const c = findChapterForIndex(state.currentIndex);
+      if (c) {
+        document.getElementById('chapterNumber').textContent = c.title;
+      }
+
+      // throttle the saving (less frequent)
+      saveProgress(false);
     }
 
-    /* ------------------------------------------------------
+    /* ----------------------------------------------------------
        EVENT LISTENERS
-       ------------------------------------------------------ */
+       ---------------------------------------------------------- */
     function setupEventListeners() {
-      const wordBoundary = document.getElementById('wordBoundary');
-      // Tap/click main word to play/pause
-      wordBoundary.addEventListener('click', () => {
+      // main word boundary => tap to play/pause
+      const wb = document.getElementById('wordBoundary');
+      wb.addEventListener('click', () => {
         if (!state.contextViewActive) {
           toggleReading();
         }
       });
 
-      // Keyboard controls
+      // keyboard (space -> toggle, arrow up/down -> WPM)
       document.addEventListener('keydown', (e) => {
-        // Space toggles reading
         if (e.code === 'Space') {
           e.preventDefault();
           toggleReading();
-        }
-        // ArrowUp -> increase WPM
-        if (e.code === 'ArrowUp') {
+        } else if (e.code === 'ArrowUp') {
           e.preventDefault();
           updateWPM(state.currentWPM + 25);
-        }
-        // ArrowDown -> decrease WPM
-        if (e.code === 'ArrowDown') {
+        } else if (e.code === 'ArrowDown') {
           e.preventDefault();
           updateWPM(state.currentWPM - 25);
         }
       });
 
-      // Theme button clicks
-      document.querySelectorAll('.theme-button').forEach((btn) => {
+      // theme buttons
+      document.querySelectorAll('.theme-button').forEach(btn => {
         btn.addEventListener('click', () => {
           setTheme(btn.dataset.theme);
         });
       });
 
-      // Initialize theme from localStorage
+      // initialize saved theme
       const savedTheme = localStorage.getItem('reader-theme') || 'light';
       setTheme(savedTheme);
+
+      // context content => single delegated click for words
+      document.getElementById('contextContent').addEventListener('click', (e) => {
+        if (e.target.classList.contains('context-word') || e.target.classList.contains('current-word')) {
+          const i = parseInt(e.target.dataset.index, 10);
+          if (!isNaN(i)) {
+            pushToUndoStack(state.currentIndex);
+            state.currentIndex = i;
+            updateAllUI();
+            generateContextHTML();
+            scrollCurrentWordIntoView();
+            showPositionIndicator();
+          }
+        }
+      });
     }
 
-    /* ------------------------------------------------------
+    /* ----------------------------------------------------------
        READING CONTROL
-       ------------------------------------------------------ */
+       ---------------------------------------------------------- */
     function toggleReading() {
       if (state.isPlaying) {
         pauseReading();
-        // Show progress tooltip
         document.getElementById('progressNavTooltip').style.opacity = '1';
       } else {
         startReading();
@@ -858,14 +841,12 @@
     }
 
     function startReading() {
-      pauseReading(); // clear any old intervals
+      pauseReading(); // ensure no duplicates
       state.isPlaying = true;
 
-      let interval = calculateInterval(state.currentWPM);
-      const wordDisplay = document.getElementById('wordDisplay');
-
-      // Immediately set text
-      wordDisplay.textContent = state.words[state.currentIndex] || '';
+      const intervalMS = calculateInterval(state.currentWPM);
+      const disp = document.getElementById('wordDisplay');
+      disp.textContent = state.words[state.currentIndex] || '';
 
       state.readingInterval = setInterval(() => {
         if (state.currentIndex >= state.words.length - 1) {
@@ -873,11 +854,11 @@
           return;
         }
         state.currentIndex++;
-        wordDisplay.textContent = state.words[state.currentIndex];
+        disp.textContent = state.words[state.currentIndex];
         updateProgress();
         updateProgressNav();
-        saveProgress();
-      }, interval);
+        saveProgress(false);
+      }, intervalMS);
     }
 
     function pauseReading() {
@@ -888,23 +869,44 @@
       }
     }
 
-    /* ------------------------------------------------------
-       PROGRESS & SAVING
-       ------------------------------------------------------ */
-    function updateProgress() {
-      let percent = 0;
-      if (state.words.length > 0) {
-        percent = (state.currentIndex / state.words.length) * 100;
-      }
-      document.getElementById('progressFill').style.height = `${percent}%`;
-      document.getElementById('progressPercent').textContent = Math.round(percent);
+    function calculateInterval(wpm) {
+      return 60000 / wpm; // ms per word
     }
 
-    async function saveProgress() {
+    /* ----------------------------------------------------------
+       PROGRESS
+       ---------------------------------------------------------- */
+    function updateProgress() {
+      let ratio = 0;
+      if (state.words.length > 0) {
+        ratio = state.currentIndex / (state.words.length - 1);
+      }
+      const pct = Math.round(ratio * 100);
+      document.getElementById('progressFill').style.height = pct + '%';
+      document.getElementById('progressPercent').textContent = pct;
+    }
+
+    /* ----------------------------------------------------------
+       SAVE PROGRESS (THROTTLED)
+       ---------------------------------------------------------- */
+    function saveProgress(immediate = false) {
+      // immediate => do it right now (on unload, etc.)
+      // otherwise, wait a bit to avoid spamming the server
+      if (immediate) {
+        doSaveProgress();
+        return;
+      }
+      if (state.saveTimeout) clearTimeout(state.saveTimeout);
+      state.saveTimeout = setTimeout(() => {
+        doSaveProgress();
+      }, 2000);
+    }
+
+    async function doSaveProgress() {
+      // local fallback
       localStorage.setItem('reader-wpm', state.currentWPM);
       localStorage.setItem(`book-{{ book.id }}-position`, state.currentIndex);
 
-      // Also attempt to save to server
       try {
         await fetch(`/api/book/{{ book.id }}/position`, {
           method: 'POST',
@@ -915,52 +917,39 @@
           })
         });
       } catch (err) {
-        // Fallback is localStorage only
         console.warn('Could not save progress to server:', err);
       }
     }
 
-    /* ------------------------------------------------------
+    /* ----------------------------------------------------------
        WPM CONTROL
-       ------------------------------------------------------ */
-    let wpmIndicatorTimeout = null;
-    function updateWPM(newWPM) {
-      // clamp
-      let clamped = Math.min(state.maxWPM, Math.max(state.minWPM, newWPM));
-      state.currentWPM = clamped;
-
-      // Reflect in UI
-      document.getElementById('wpmValueTop').textContent = clamped;
-      document.getElementById('wpmIndicatorValue').textContent = clamped;
+       ---------------------------------------------------------- */
+    let wpmIndicatorTimer;
+    function updateWPM(newVal) {
+      let w = Math.max(state.minWPM, Math.min(state.maxWPM, newVal));
+      state.currentWPM = w;
+      document.getElementById('wpmValueTop').textContent = w;
+      document.getElementById('wpmIndicatorValue').textContent = w;
       showWPMIndicator();
 
-      // If reading, refresh interval
       if (state.isPlaying) {
         pauseReading();
         startReading();
       }
     }
 
-    function calculateInterval(wpm) {
-      // words per minute -> ms per word
-      return 60000 / wpm;
-    }
-
     function showWPMIndicator() {
       const indicator = document.getElementById('wpmIndicator');
       indicator.classList.add('visible');
-
-      if (wpmIndicatorTimeout) {
-        clearTimeout(wpmIndicatorTimeout);
-      }
-      wpmIndicatorTimeout = setTimeout(() => {
+      if (wpmIndicatorTimer) clearTimeout(wpmIndicatorTimer);
+      wpmIndicatorTimer = setTimeout(() => {
         indicator.classList.remove('visible');
       }, 1500);
     }
 
-    /* ------------------------------------------------------
-       CONTEXT VIEW (FULL TEXT)
-       ------------------------------------------------------ */
+    /* ----------------------------------------------------------
+       CONTEXT VIEW
+       ---------------------------------------------------------- */
     function toggleContextView() {
       if (state.contextViewActive) {
         hideContextView();
@@ -975,23 +964,17 @@
 
       state.contextViewActive = true;
       document.body.style.overflow = 'hidden';
-
-      // Generate full text in context
       generateContextHTML();
 
-      // Show overlay
-      const view = document.getElementById('contextView');
-      view.classList.add('visible');
+      const cv = document.getElementById('contextView');
+      cv.classList.add('visible');
 
-      // Scroll current word into view
+      // scroll current word into view
       requestAnimationFrame(() => {
-        let cw = document.querySelector('.current-word');
-        if (cw) {
-          cw.scrollIntoView({ behavior: 'auto', block: 'center' });
-        }
+        scrollCurrentWordIntoView(false);
       });
 
-      // Update toggle button style
+      // update button
       const btn = document.getElementById('contextModeButton');
       btn.classList.add('active');
       btn.innerHTML = `
@@ -1007,20 +990,20 @@
       state.contextViewActive = false;
       document.body.style.overflow = '';
 
-      const view = document.getElementById('contextView');
-      view.classList.remove('visible');
+      const cv = document.getElementById('contextView');
+      cv.classList.remove('visible');
 
-      // Resume if was playing
+      // if was playing, resume
       if (state.wasPlayingBeforeContext) {
         startReading();
       }
       state.wasPlayingBeforeContext = false;
 
-      // Update single word UI
+      // update single word display
       document.getElementById('wordDisplay').textContent =
         state.words[state.currentIndex] || '';
 
-      // Update toggle button style
+      // update button
       const btn = document.getElementById('contextModeButton');
       btn.classList.remove('active');
       btn.innerHTML = `
@@ -1034,63 +1017,59 @@
 
     function generateContextHTML() {
       const container = document.getElementById('contextContent');
-      container.innerHTML = ''; // clear
+      container.innerHTML = '';
 
-      // We'll build up simple HTML with data attributes, but NOT attach click listeners to each span:
       let html = '';
-      let currentChapterTitle = null;
-      for (let idx = 0; idx < state.words.length; idx++) {
-        // Insert chapter markers:
-        const chapObj = state.chapters.find((c) => c.position === idx);
-        if (chapObj && chapObj.title !== currentChapterTitle) {
-          currentChapterTitle = chapObj.title;
-          html += `<div class="chapter-indicator">${chapObj.title}</div>`;
+      let chapterIndex = 0;
+      let nextChapterPos = state.chapters.length > 0 ? state.chapters[0].position : -1;
+      let chapterTitle = state.chapters.length > 0 ? state.chapters[0].title : null;
+
+      // single loop to build text with chapter markers
+      for (let i = 0; i < state.words.length; i++) {
+        if (i === nextChapterPos) {
+          // insert chapter indicator
+          html += `<div class="chapter-indicator">${chapterTitle}</div>`;
+
+          // move to next chapter
+          chapterIndex++;
+          if (chapterIndex < state.chapters.length) {
+            nextChapterPos = state.chapters[chapterIndex].position;
+            chapterTitle = state.chapters[chapterIndex].title;
+          } else {
+            nextChapterPos = -1;
+          }
         }
-        const cls = (idx === state.currentIndex) ? 'current-word' : 'context-word';
-        html += `<span class="${cls}" data-index="${idx}">${state.words[idx]}</span> `;
+        const cls = (i === state.currentIndex) ? 'current-word' : 'context-word';
+        html += `<span class="${cls}" data-index="${i}">${state.words[i]}</span> `;
       }
+
       container.innerHTML = html;
     }
 
-    // We attach this once, outside the big loop
-    document.getElementById('contextContent').addEventListener('click', (e) => {
-      // If user clicked the container itself, ignore
-      if (!e.target.classList.contains('context-word') &&
-          !e.target.classList.contains('current-word')) {
-        return;
-      }
-
-      // We have clicked on a word
-      const index = parseInt(e.target.dataset.index, 10);
-      if (!isNaN(index)) {
-        pushToUndoStack(state.currentIndex);
-        state.currentIndex = index;
-        updateAllUI();       // refresh single-word display & progress
-        generateContextHTML();  // re-highlight in context
-        scrollCurrentWordIntoView();
-      }
-    });
-
-    function showPositionIndicator() {
-      // Quick little pop-up near the bottom (or any style you want)
-      const el = document.getElementById('positionIndicator');
-      if (el) {
-        // Some leftover from older code? If not existing, we can skip.
-        el.classList.add('visible');
-        setTimeout(() => el.classList.remove('visible'), 2000);
-      }
-    }
-
-    function scrollCurrentWordIntoView() {
-      let cw = document.querySelector('.current-word');
+    function scrollCurrentWordIntoView(smooth = true) {
+      const cw = document.querySelector('.current-word');
       if (cw) {
-        cw.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        cw.scrollIntoView({
+          behavior: smooth ? 'smooth' : 'auto',
+          block: 'center'
+        });
       }
     }
 
-    /* ------------------------------------------------------
-       CHAPTERS DROPDOWN
-       ------------------------------------------------------ */
+    /* position indicator if you want a small ephemeral popup */
+    function showPositionIndicator() {
+      // If you have an element with id="positionIndicator", you can do:
+      // const el = document.getElementById('positionIndicator');
+      // if (el) {
+      //   el.classList.add('visible');
+      //   setTimeout(() => el.classList.remove('visible'), 2000);
+      // }
+      // For now, do nothing or implement a small toast.
+    }
+
+    /* ----------------------------------------------------------
+       CHAPTERS
+       ---------------------------------------------------------- */
     function toggleChaptersList() {
       const list = document.getElementById('chaptersList');
       list.classList.toggle('visible');
@@ -1103,79 +1082,72 @@
       const list = document.getElementById('chaptersList');
       list.innerHTML = '';
 
-      state.chapters.forEach((chapter, idx) => {
-        const isLast = idx === state.chapters.length - 1;
-        const nextPos = isLast ? state.words.length : state.chapters[idx + 1].position;
+      for (let i = 0; i < state.chapters.length; i++) {
+        const chap = state.chapters[i];
+        const nextPos = (i < state.chapters.length - 1)
+          ? state.chapters[i + 1].position
+          : state.words.length;
 
-        const isCurrent =
-          state.currentIndex >= chapter.position &&
-          state.currentIndex < nextPos;
+        // are we currently in this chapter?
+        let inThisChapter = (state.currentIndex >= chap.position && state.currentIndex < nextPos);
 
         let progress = 0;
-        if (isCurrent) {
-          // how far into this chapter are we?
-          let span = nextPos - chapter.position;
-          let offset = state.currentIndex - chapter.position;
-          progress = Math.round((offset / span) * 100);
+        if (inThisChapter) {
+          let chapterSize = nextPos - chap.position;
+          let offset = state.currentIndex - chap.position;
+          progress = Math.round((offset / chapterSize) * 100);
         } else if (state.currentIndex >= nextPos) {
-          progress = 100; // fully past
+          // fully past
+          progress = 100;
         }
 
-        const item = document.createElement('div');
-        item.className = 'chapter-item' + (isCurrent ? ' current' : '');
-        item.innerHTML = `
-          <span>${chapter.title}</span>
+        const div = document.createElement('div');
+        div.className = 'chapter-item' + (inThisChapter ? ' current' : '');
+        div.innerHTML = `
+          <span>${chap.title}</span>
           <span class="chapter-progress">${progress}%</span>
         `;
-        item.onclick = () => jumpToChapter(chapter.position);
-        list.appendChild(item);
-      });
+        div.onclick = () => jumpToChapter(chap.position);
+        list.appendChild(div);
+      }
     }
 
     function jumpToChapter(pos) {
       pushToUndoStack(state.currentIndex);
       state.currentIndex = pos;
       updateAllUI();
-
-      // Scroll in context
       generateContextHTML();
       scrollCurrentWordIntoView();
       showPositionIndicator();
-
-      // Hide the dropdown
       document.getElementById('chaptersList').classList.remove('visible');
     }
 
-    function getCurrentChapter() {
-      let found = null;
+    function findChapterForIndex(idx) {
+      // do a quick loop or binary search. For simplicity:
       for (let i = 0; i < state.chapters.length; i++) {
-        let c = state.chapters[i];
-        let nextPos = (i < state.chapters.length - 1) ? state.chapters[i+1].position : state.words.length;
-        if (state.currentIndex >= c.position && state.currentIndex < nextPos) {
-          found = c;
-          break;
+        const chap = state.chapters[i];
+        const nextPos = (i < state.chapters.length - 1) ? state.chapters[i + 1].position : state.words.length;
+        if (idx >= chap.position && idx < nextPos) {
+          return chap;
         }
       }
-      return found;
+      return null;
     }
 
-    /* ------------------------------------------------------
-       UNDO STACK
-       ------------------------------------------------------ */
+    /* ----------------------------------------------------------
+       UNDO
+       ---------------------------------------------------------- */
     function pushToUndoStack(pos) {
       state.undoStack.push(pos);
       if (state.undoStack.length > 10) {
-        state.undoStack.shift(); // keep up to 10
+        state.undoStack.shift();
       }
     }
-
     function undoLastPosition() {
       if (state.undoStack.length > 0) {
         const last = state.undoStack.pop();
         state.currentIndex = last;
         updateAllUI();
-
-        // If context is open, update it
         if (state.contextViewActive) {
           generateContextHTML();
           scrollCurrentWordIntoView();
@@ -1183,51 +1155,44 @@
       }
     }
 
-    /* ------------------------------------------------------
-       THEME MANAGEMENT
-       ------------------------------------------------------ */
+    /* ----------------------------------------------------------
+       THEME
+       ---------------------------------------------------------- */
     function setTheme(theme) {
       document.documentElement.setAttribute('data-theme', theme);
       localStorage.setItem('reader-theme', theme);
-
-      // Update button active states
-      document.querySelectorAll('.theme-button').forEach((btn) => {
+      document.querySelectorAll('.theme-button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.theme === theme);
       });
     }
 
-    /* ------------------------------------------------------
-       PROGRESS NAV (RIGHT SLIDER)
-       ------------------------------------------------------ */
+    /* ----------------------------------------------------------
+       PROGRESS NAV
+       ---------------------------------------------------------- */
     function setupProgressNav() {
       const nav = document.getElementById('progressNav');
       const fill = document.getElementById('progressNavFill');
       const tooltip = document.getElementById('progressNavTooltip');
-      const wordDisplay = document.getElementById('wordDisplay');
+      const wordDisp = document.getElementById('wordDisplay');
 
       let isDragging = false;
 
-      function updateProgressFromY(clientY) {
+      function updateFromY(clientY) {
         const rect = nav.getBoundingClientRect();
-        // 0 at top => 100% progress => near end of book
-        // 1 at bottom => 0% => start of book
         let ratio = 1 - (clientY - rect.top) / rect.height;
         if (ratio < 0) ratio = 0;
         if (ratio > 1) ratio = 1;
 
-        const idx = Math.floor(ratio * (state.words.length - 1));
-        const safeIdx = Math.max(0, Math.min(idx, state.words.length - 1));
+        const i = Math.floor(ratio * (state.words.length - 1));
+        const safe = Math.max(0, Math.min(i, state.words.length - 1));
 
-        // Fill bar
-        let pct = (safeIdx / (state.words.length - 1)) * 100;
+        let pct = (safe / (state.words.length - 1)) * 100;
         fill.style.height = pct + '%';
 
-        // Tooltip info
         tooltip.innerHTML = `
-          <div>Word ${safeIdx + 1} / ${state.words.length} (${Math.round(pct)}%)</div>
-          <div class="word-preview">${state.words[safeIdx] || ''}</div>
+          <div>Word ${safe + 1} / ${state.words.length} (${Math.round(pct)}%)</div>
+          <div class="word-preview">${state.words[safe] || ''}</div>
         `;
-        // Adjust tooltip vertical position
         let tRect = tooltip.getBoundingClientRect();
         let tY = clientY - tRect.height / 2;
         let minY = rect.top;
@@ -1236,87 +1201,62 @@
         if (tY > maxY) tY = maxY;
         tooltip.style.top = tY + 'px';
 
-        // For immediate visual feedback in center word
-        wordDisplay.textContent = state.words[safeIdx] || '';
-        return safeIdx;
-      }
-
-      function onDragMove(e) {
-        if (!isDragging) return;
-        e.preventDefault();
-        const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-        state.currentIndex = updateProgressFromY(clientY);
+        // immediate visual feedback
+        wordDisp.textContent = state.words[safe];
+        return safe;
       }
 
       function onDragStart(e) {
         isDragging = true;
-        // Pause reading if playing
         if (state.isPlaying) pauseReading();
-
-        onDragMove(e); // initial update
+        onDragMove(e);
       }
-
+      function onDragMove(e) {
+        if (!isDragging) return;
+        e.preventDefault();
+        const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+        state.currentIndex = updateFromY(clientY);
+      }
       function onDragEnd() {
         if (!isDragging) return;
         isDragging = false;
-        saveProgress();
+        saveProgress(false);
       }
 
-      // Mouse
+      // mouse
       nav.addEventListener('mousedown', onDragStart);
       document.addEventListener('mousemove', onDragMove);
       document.addEventListener('mouseup', onDragEnd);
 
-      // Touch
+      // touch
       nav.addEventListener('touchstart', onDragStart, { passive: false });
       document.addEventListener('touchmove', onDragMove, { passive: false });
       document.addEventListener('touchend', onDragEnd);
       document.addEventListener('touchcancel', onDragEnd);
 
-      // Press "N" to toggle progressNav visibility
+      // press "N" to toggle
       document.addEventListener('keydown', (e) => {
         if (e.key.toLowerCase() === 'n') {
-          let currentOpacity = getComputedStyle(nav).opacity;
-          nav.style.opacity = currentOpacity === '1' ? '0' : '1';
+          let op = getComputedStyle(nav).opacity;
+          nav.style.opacity = (op === '1') ? '0' : '1';
         }
       });
 
-      // Show tooltip initially (since reading is paused)
+      // show tooltip by default since reading is initially paused
       tooltip.style.opacity = '1';
     }
 
     function updateProgressNav() {
-      // Just update fill & tooltip data
       let ratio = 0;
       if (state.words.length > 1) {
         ratio = state.currentIndex / (state.words.length - 1);
       }
       let pct = ratio * 100;
       document.getElementById('progressNavFill').style.height = pct + '%';
-
-      // Update tooltip text
       document.getElementById('wordNumber').textContent = state.currentIndex;
       document.getElementById('totalWords').textContent = state.words.length;
       document.getElementById('wordPreview').textContent = state.words[state.currentIndex] || '';
     }
-
-    /* ------------------------------------------------------
-       ON LOAD
-       ------------------------------------------------------ */
-    document.addEventListener('DOMContentLoaded', () => {
-      initialize();
-
-      // Save progress if user leaves
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-          saveProgress();
-        }
-      });
-
-      window.addEventListener('beforeunload', () => {
-        saveProgress();
-      });
-    });
   </script>
 </body>
 </html>
