@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{ book.title }} - Overhauled Flash Reader</title>
+  <title>{{ book.title }} - Virtual-Scroll Reader</title>
+
+  <!-- 1) Include Clusterize.js (CDN or local) -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/clusterize.js@0.19.2/clusterize.min.js"></script> -->
 
   <style>
     /* ====================== THEME VARIABLES ======================= */
@@ -46,7 +49,6 @@
       color: var(--text-color);
       height: 100vh;
       width: 100vw;
-      /* Lock background scroll, so only the context overlay can scroll: */
       overflow: hidden;
       transition: background-color 0.3s, color 0.3s;
     }
@@ -205,11 +207,10 @@
 
     /* ============== CONTEXT VIEW OVERLAY ============== */
     .context-view {
-      display: none; /* hidden by default */
+      display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       background: var(--surface-color);
-      overflow-y: auto;
       z-index: 9999;
       opacity: 0;
       transition: opacity 0.3s ease-out;
@@ -285,49 +286,60 @@
       font-weight: 500;
     }
 
-    .context-content {
-      position: relative;
+    /* Clusterize containers: we make them fill parent */
+    .context-content-wrapper {
       width: 100%;
+      height: calc(100vh - 60px);
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
       box-sizing: border-box;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.8;
+      font-size: 18px;
+      max-width: 900px;
     }
-    .top-spacer, .bottom-spacer {
-      height: 0;
-      width: 100%;
+    .clusterize-no-data {
+      padding: 12px;
+      opacity: 0.6;
+      font-style: italic;
     }
-    .chunks-container {
-      position: relative;
-      width: 100%;
-    }
+
+    /* Word spans within each row */
     .virtual-word {
       cursor: pointer;
-      padding: 2px 4px;
+      padding: 4px 6px;
+      margin: 0 1px;
       border-radius: 4px;
       display: inline-block;
       user-select: text;
-      transition: background 0.2s;
+      transition: background 0.2s, color 0.2s;
     }
     .virtual-word:hover {
       background: var(--progress-bg);
       color: var(--primary-color);
     }
     .current-word {
-      background: var(--progress-bg);
-      color: var(--primary-color);
+      background: var(--primary-color) !important;
+      color: white !important;
       font-weight: 600;
-      padding: 2px 4px;
+      padding: 4px 6px;
+      margin: 0 1px;
       border-radius: 4px;
-      scroll-margin-top: 100px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
     .chapter-indicator {
       display: block;
       text-align: center;
-      padding: 20px 0;
-      margin: 20px 0;
+      padding: 24px 0;
+      margin: 32px 0;
       border-top: 1px solid var(--progress-bg);
       border-bottom: 1px solid var(--progress-bg);
       color: var(--primary-color);
-      font-weight: 500;
+      font-weight: 600;
+      font-size: 20px;
       background: var(--surface-color);
+      letter-spacing: 0.5px;
     }
 
     /* ============== WPM INDICATOR ============== */
@@ -390,15 +402,31 @@
       font-weight: 500;
     }
 
-    /* Hide theme toggle, progress info, etc. when context overlay is shown */
+    /* Hide controls when context overlay is shown */
     .context-view.visible ~ .progress-bar,
     .context-view.visible ~ .progress-info,
     .context-view.visible ~ .theme-toggle,
     .context-view.visible ~ .wpm-indicator {
       display: none;
     }
+
+    /* Improve table layout */
+    .clusterize table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .clusterize td {
+      padding: 8px 0;
+      line-height: 1.8;
+    }
+
+    /* Add smooth scrolling to context content */
+    #contextScrollArea {
+      scroll-behavior: smooth;
+    }
   </style>
 </head>
+
 <body>
 <div class="reader-container">
   <!-- ============== BACK BUTTON ============== -->
@@ -455,10 +483,13 @@
       <button class="context-undo" onclick="undoLastPosition()">Undo</button>
       <button class="context-close-button" onclick="hideContextView()">Close</button>
     </div>
-    <div class="context-content" id="contextContent">
-      <div class="top-spacer" id="topSpacer"></div>
-      <div class="chunks-container" id="chunksContainer"></div>
-      <div class="bottom-spacer" id="bottomSpacer"></div>
+
+    <!-- 2) Clusterize requires a wrapper + two child elements (list + content) -->
+    <div class="context-content-wrapper" id="contextScrollArea">
+      <table class="clusterize" style="border-collapse:collapse;width:100%;">
+        <tbody id="chunksContainer" class="clusterize-content"></tbody>
+      </table>
+      <div class="clusterize-no-data">Loading…</div>
     </div>
   </div>
 
@@ -491,20 +522,15 @@ const state = {
   minWPM: 100,
   maxWPM: 1200,
 
-  // Context
+  // Context + Virtual Scroll
   contextViewActive: false,
   wasPlayingBeforeContext: false,
-  initialScrollDone: false,
+  clusterize: null,   // We'll store our Clusterize instance here
+  allRows: [],        // All HTML rows for clusterize
+  wordsPerRow: 10,    // You can change how many words you show per row
 
   // Throttle saving
   saveTimeout: null,
-
-  // Chunk-based "virtual scroll"
-  chunkSize: 500,
-  chunkedData: [], // each item: { startIndex, endIndex, html, exactHeight }
-  topPadding: 0,
-  bottomPadding: 0,
-  chunksMeasured: false,
 };
 
 
@@ -513,52 +539,74 @@ const state = {
 ========================================================================= */
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    console.log('[INIT] DOMContentLoaded - starting main setup');
-
-    // Optional: wait for font loading
+    // Optional: wait for fonts
     if (document.fonts && document.fonts.ready) {
-      console.log('[INIT] Waiting for document.fonts.ready...');
       await document.fonts.ready.catch(() => {});
-      console.log('[INIT] Fonts loaded (or skip due to catch).');
     }
 
     // Fetch book content
-    console.log('[INIT] Fetching book content from /api/book/{{ book.id }}/content');
     const resp = await fetch(`/api/book/{{ book.id }}/content`);
     if (!resp.ok) {
       throw new Error('Failed to fetch book content');
     }
     const data = await resp.json();
-    console.log('[INIT] Book content fetched successfully:', data);
 
     // Tokenize content
     const rawContent = data.content || '';
     const tokens = rawContent.match(/\w+|\S/g) || [];
     state.words = tokens;
-    console.log(`[INIT] Tokenized total words: ${state.words.length}`);
 
     // Current position
     const pos = parseInt(data.current_position, 10) || 0;
     state.currentIndex = Math.min(Math.max(pos, 0), state.words.length - 1);
-    console.log(`[INIT] Current position set to: ${state.currentIndex}`);
 
     // Chapters
     state.chapters = data.chapters || [];
-    console.log('[INIT] Loaded chapters:', state.chapters);
 
-    // Build chunk data
-    buildChunksOnly();
+    // Build the “rows” array for Clusterize
+    buildAllRows();
 
     // Initialize UI
     updateAllUI();
     setupEventListeners();
     setupProgressNav();
 
-    // Now that everything loaded, enable context button
+    // 3) Initialize the Clusterize instance
+    let clusterizeInitialized = false;
+    state.clusterize = new Clusterize({
+      scrollId: 'contextScrollArea',
+      contentId: 'chunksContainer',
+      rows: state.allRows,
+      no_data_text: 'No data',
+      rows_in_block: 50,
+      blocks_in_cluster: 4,
+      callbacks: {
+        clusterWillChange: function() {
+          // Only save scroll position after initialization
+          if (clusterizeInitialized) {
+            const container = document.getElementById('contextScrollArea');
+            if (container && state.clusterize) {
+              state.clusterize.options.scroll_top = container.scrollTop;
+            }
+          }
+        },
+        clusterChanged: function() {
+          // After cluster changes, restore scroll and attach handlers
+          if (state.contextViewActive) {
+            attachWordClickHandlers();
+            if (!state.initialScrollDone) {
+              scrollCurrentWordIntoView(false);
+            }
+          }
+        }
+      }
+    });
+    clusterizeInitialized = true;
+
+    // Enable context button
     const ctxBtn = document.getElementById('contextModeButton');
     ctxBtn.style.pointerEvents = 'auto';
     ctxBtn.style.opacity = '1';
-    console.log('[INIT] Context mode button enabled. Setup complete.');
 
   } catch (err) {
     console.error('Error during initialization:', err);
@@ -567,123 +615,44 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
 /* ========================================================================
-   CHUNK BUILDING & MEASUREMENT
+   BUILDING ROWS FOR CLUSTERIZE
 ========================================================================= */
-function buildChunksOnly() {
-  console.log('[buildChunksOnly] Building chunk data...');
-  state.chunkedData = [];
-  
-  // Estimate average characters per line (based on common reading widths)
-  const CHARS_PER_LINE = 60;
-  const LINES_PER_VIEWPORT = 20;
-  const CHARS_PER_CHUNK = CHARS_PER_LINE * LINES_PER_VIEWPORT;
-  
-  for (let i = 0; i < state.words.length; i += state.chunkSize) {
-    const startIndex = i;
-    const endIndex = Math.min(i + state.chunkSize, state.words.length);
-    const slice = state.words.slice(startIndex, endIndex);
+function buildAllRows() {
+  state.allRows = [];
+  let chapterIndex = 0;
+  let nextChapterPos = (state.chapters.length) ? state.chapters[0].position : -1;
+  let chapterTitle = (state.chapters.length) ? state.chapters[0].title : null;
 
-    // Calculate estimated height based on text content
-    const chunkText = slice.join(' ');
-    const estimatedLines = Math.ceil(chunkText.length / CHARS_PER_LINE);
-    const estimatedHeight = estimatedLines * 24; // Assume 24px line height
+  // Increase words per row for better readability
+  state.wordsPerRow = 22;
 
-    const chunkHTML = buildChunkHTML(slice, startIndex, false);
-    state.chunkedData.push({
-      startIndex,
-      endIndex,
-      html: chunkHTML,
-      exactHeight: estimatedHeight // Start with estimated height
-    });
-  }
-  console.log(`[buildChunksOnly] Total chunks created: ${state.chunkedData.length}`);
-}
+  let rowWords = [];
+  let rowCount = 0;
+  let currentWordFound = false;
 
-function measureAllChunks() {
-  if (state.chunksMeasured) {
-    console.log('[measureAllChunks] Already measured. Skipping...');
-    return;
-  }
-  console.log('[measureAllChunks] Starting measurement of all chunks...');
+  for (let i = 0; i < state.words.length; i++) {
+    // Insert chapter indicator
+    if (chapterIndex < state.chapters.length && i === nextChapterPos) {
+      if (rowWords.length > 0) {
+        // Flush current row before chapter indicator
+        const rowHTML = rowWords
+          .map(({ word, index }) => {
+            const isCurrentWord = index === state.currentIndex;
+            if (isCurrentWord) currentWordFound = true;
+            const cls = isCurrentWord ? 'current-word' : 'virtual-word';
+            return `<span class="${cls}" data-index="${index}">${word}</span>`;
+          })
+          .join(' ');
+        state.allRows.push(`<tr><td>${rowHTML}</td></tr>`);
+        rowWords = [];
+      }
 
-  // Try to measure a test element first
-  const canMeasure = testLayoutMeasurement();
-  if (!canMeasure) {
-    console.log('[measureAllChunks] Layout measurement blocked. Using estimated heights.');
-    state.chunksMeasured = true;
-    return; // Keep using the estimated heights we set in buildChunksOnly
-  }
+      state.allRows.push(`
+        <tr><td>
+          <div class="chapter-indicator">${chapterTitle}</div>
+        </td></tr>
+      `);
 
-  const contextContent = document.getElementById('contextContent');
-  const measureContainer = document.createElement('div');
-  measureContainer.style.cssText = `
-    position: absolute;
-    visibility: hidden;
-    top: -9999px;
-    left: -9999px;
-    width: ${contextContent.clientWidth}px;
-    padding: 0 20px;
-    box-sizing: border-box;
-  `;
-  contextContent.appendChild(measureContainer);
-
-  let gotAnyNonZero = false;
-  for (let i = 0; i < state.chunkedData.length; i++) {
-    const chunk = state.chunkedData[i];
-    const div = document.createElement('div');
-    div.innerHTML = chunk.html;
-    measureContainer.appendChild(div);
-
-    const rect = div.getBoundingClientRect();
-    if (rect.height > 0) {
-      gotAnyNonZero = true;
-      chunk.exactHeight = rect.height;
-    }
-    // If height is 0, keep the estimated height we set earlier
-    
-    measureContainer.removeChild(div);
-  }
-
-  contextContent.removeChild(measureContainer);
-  
-  if (!gotAnyNonZero) {
-    console.warn('[measureAllChunks] All measurements returned 0. Using estimated heights.');
-  } else {
-    console.log('[measureAllChunks] Successfully measured chunk heights.');
-  }
-  
-  state.chunksMeasured = true;
-}
-
-function testLayoutMeasurement() {
-  try {
-    const test = document.createElement('div');
-    test.textContent = 'test';
-    test.style.cssText = 'position:absolute;visibility:hidden;';
-    document.body.appendChild(test);
-    const rect = test.getBoundingClientRect();
-    document.body.removeChild(test);
-    return rect.height > 0;
-  } catch (e) {
-    console.warn('[testLayoutMeasurement] Layout measurement not available:', e);
-    return false;
-  }
-}
-
-function buildChunkHTML(wordArray, offset, highlightCurrent) {
-  let html = '';
-  let chapterIndex = getChapterIndexForWord(offset);
-  let nextChapterPos =
-    (chapterIndex < state.chapters.length) ? state.chapters[chapterIndex].position : -1;
-  let chapterTitle =
-    (chapterIndex < state.chapters.length) ? state.chapters[chapterIndex].title : null;
-
-  for (let i = 0; i < wordArray.length; i++) {
-    const globalIndex = offset + i;
-
-    // Insert chapter indicator if needed
-    if (chapterIndex < state.chapters.length && globalIndex === nextChapterPos) {
-      html += `<div class="chapter-indicator">${chapterTitle}</div>`;
       chapterIndex++;
       if (chapterIndex < state.chapters.length) {
         nextChapterPos = state.chapters[chapterIndex].position;
@@ -693,16 +662,98 @@ function buildChunkHTML(wordArray, offset, highlightCurrent) {
       }
     }
 
-    // Highlight if current word
-    let classes = 'virtual-word';
-    if (highlightCurrent && globalIndex === state.currentIndex) {
-      classes = 'current-word';
-    }
+    rowWords.push({ word: state.words[i], index: i });
 
-    html += `<span class="${classes}" data-index="${globalIndex}">${wordArray[i]}</span> `;
+    if (rowWords.length >= state.wordsPerRow || i === state.words.length - 1) {
+      const rowHTML = rowWords
+        .map(({ word, index }) => {
+          const isCurrentWord = index === state.currentIndex;
+          if (isCurrentWord) currentWordFound = true;
+          const cls = isCurrentWord ? 'current-word' : 'virtual-word';
+          return `<span class="${cls}" data-index="${index}">${word}</span>`;
+        })
+        .join(' ');
+
+      state.allRows.push(`<tr><td>${rowHTML}</td></tr>`);
+      rowWords = [];
+      rowCount++;
+    }
   }
 
-  return html;
+  console.log(`[buildAllRows] Current word ${currentWordFound ? 'was' : 'was not'} found in rows`);
+  return currentWordFound;
+}
+
+/** Whenever we jump or update the current index, we can rebuild or update rows. */
+function rebuildRowsAndRefreshCluster() {
+  // Rebuild all rows with the new "current word" highlight
+  buildAllRows();
+  if (state.clusterize) {
+    // Tell Clusterize to set the new array
+    state.clusterize.update(state.allRows);
+  }
+  // Re-attach click events
+  attachWordClickHandlers();
+}
+
+
+/* ========================================================================
+   CLICK EVENTS ON WORDS
+========================================================================= */
+function attachWordClickHandlers() {
+  const container = document.getElementById('chunksContainer');
+  if (!container) return;
+
+  // Remove existing handlers first
+  const oldWords = container.querySelectorAll('.virtual-word, .current-word');
+  oldWords.forEach(el => {
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+  });
+
+  // Attach new handlers
+  const words = container.querySelectorAll('.virtual-word, .current-word');
+  words.forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      const newIndex = parseInt(e.target.dataset.index, 10);
+      if (!isNaN(newIndex) && newIndex !== state.currentIndex) {
+        // Save current position for undo
+        pushToUndoStack(state.currentIndex);
+        
+        // Update position
+        state.currentIndex = newIndex;
+        
+        // Update UI
+        updateAllUI();
+        
+        // Rebuild cluster with new highlight
+        buildAllRows();
+        if (state.clusterize) {
+          state.clusterize.update(state.allRows);
+        }
+        
+        // Scroll the new word into view
+        requestAnimationFrame(() => {
+          scrollCurrentWordIntoView(true);
+        });
+      }
+    });
+  });
+}
+
+
+/* ========================================================================
+   SCROLLING A PARTICULAR INDEX INTO VIEW
+========================================================================= */
+function scrollIndexIntoView(index) {
+  // In clusterize, we can scroll to a specific row
+  const rowNum = Math.floor(index / state.wordsPerRow);
+  if (state.clusterize) {
+    // “scrollTo” is not built-in in old versions, but we can do:
+    document.getElementById('contextScrollArea').scrollTop =
+      rowNum * 40; // estimate ~40px per row, or measure it
+  }
 }
 
 
@@ -710,7 +761,6 @@ function buildChunkHTML(wordArray, offset, highlightCurrent) {
    EVENT LISTENERS & UI
 ========================================================================= */
 function setupEventListeners() {
-  console.log('[setupEventListeners] Setting up...');
   const wb = document.getElementById('wordBoundary');
   wb.addEventListener('click', () => {
     if (!state.contextViewActive) {
@@ -762,28 +812,9 @@ function setupEventListeners() {
     });
   });
   setTheme(localStorage.getItem('reader-theme') || 'light');
-
-  // Scroll in context view
-  document.getElementById('contextContent').addEventListener('scroll', onContextScroll);
-
-  // Click on word in chunks
-  document.getElementById('chunksContainer').addEventListener('click', (e) => {
-    if (e.target.matches('.virtual-word') || e.target.matches('.current-word')) {
-      const i = parseInt(e.target.dataset.index, 10);
-      if (!isNaN(i)) {
-        console.log(`[chunksContainer click] Jumping from index ${state.currentIndex} to ${i}`);
-        pushToUndoStack(state.currentIndex);
-        state.currentIndex = i;
-        updateAllUI();
-        renderVisibleChunks();
-        scrollCurrentWordIntoView();
-      }
-    }
-  });
 }
 
 function updateAllUI() {
-  console.log('[updateAllUI] Updating main UI elements...');
   const display = document.getElementById('wordDisplay');
   display.textContent = state.words[state.currentIndex] || '';
 
@@ -804,11 +835,9 @@ function updateAllUI() {
 ========================================================================= */
 function toggleReading() {
   if (state.isPlaying) {
-    console.log('[toggleReading] Pausing...');
     pauseReading();
     document.getElementById('progressNavTooltip').style.opacity = '1';
   } else {
-    console.log('[toggleReading] Starting reading...');
     startReading();
     document.getElementById('progressNavTooltip').style.opacity = '0';
   }
@@ -817,7 +846,6 @@ function toggleReading() {
 function startReading() {
   pauseReading();
   state.isPlaying = true;
-  console.log('[startReading] Reading started. Current index:', state.currentIndex);
 
   const intervalMS = 60000 / state.currentWPM;
   const disp = document.getElementById('wordDisplay');
@@ -825,7 +853,6 @@ function startReading() {
 
   state.readingInterval = setInterval(() => {
     if (state.currentIndex >= state.words.length - 1) {
-      console.log('[startReading] Reached end of words. Stopping.');
       pauseReading();
       return;
     }
@@ -843,14 +870,12 @@ function pauseReading() {
     clearInterval(state.readingInterval);
     state.readingInterval = null;
   }
-  console.log('[pauseReading] Reading paused.');
 }
 
 function jumpWords(offset) {
   const oldIndex = state.currentIndex;
   let newIndex = oldIndex + offset;
   newIndex = Math.max(0, Math.min(newIndex, state.words.length - 1));
-  console.log(`[jumpWords] Jumping from ${oldIndex} to ${newIndex} (offset ${offset}).`);
   pushToUndoStack(oldIndex);
   state.currentIndex = newIndex;
   updateAllUI();
@@ -859,9 +884,9 @@ function jumpWords(offset) {
     pauseReading();
     startReading();
   }
-  if (state.contextViewActive) {
-    renderVisibleChunks();
-    scrollCurrentWordIntoView();
+  if (state.contextViewActive && state.clusterize) {
+    rebuildRowsAndRefreshCluster();
+    scrollIndexIntoView(newIndex);
   }
 }
 
@@ -904,7 +929,6 @@ function saveProgress(immediate) {
 async function doSaveProgress() {
   localStorage.setItem('reader-wpm', state.currentWPM);
   localStorage.setItem(`book-{{ book.id }}-position`, state.currentIndex);
-  console.log(`[doSaveProgress] Saving position = ${state.currentIndex}, WPM = ${state.currentWPM}`);
 
   try {
     await fetch(`/api/book/{{ book.id }}/position`, {
@@ -912,7 +936,6 @@ async function doSaveProgress() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ position: state.currentIndex, wpm: state.currentWPM })
     });
-    console.log('[doSaveProgress] Progress saved to server.');
   } catch (err) {
     console.warn('Could not save progress:', err);
   }
@@ -924,10 +947,8 @@ async function doSaveProgress() {
 ========================================================================= */
 let wpmIndicatorTimer;
 function updateWPM(val) {
-  const oldWPM = state.currentWPM;
   const w = Math.max(state.minWPM, Math.min(state.maxWPM, val));
   state.currentWPM = w;
-  console.log(`[updateWPM] Changed from ${oldWPM} -> ${w}`);
 
   document.getElementById('wpmValueTop').textContent = String(w);
   document.getElementById('wpmIndicatorValue').textContent = String(w);
@@ -964,77 +985,81 @@ function toggleContextView() {
 
 function showContextView() {
   console.log('[showContextView] Toggling ON context view...');
+  
+  // Save reading state
   state.wasPlayingBeforeContext = state.isPlaying;
   if (state.isPlaying) {
     pauseReading();
   }
 
-  // Set active state first
+  // Set active state
   state.contextViewActive = true;
   state.initialScrollDone = false;
-  
-  // Ensure chunks are ready
-  if (!state.chunksMeasured) {
-    measureAllChunks();
-  }
 
   const cv = document.getElementById('contextView');
-  const content = document.getElementById('contextContent');
+  
+  // First rebuild rows and ensure current word is included
+  const currentWordFound = buildAllRows();
+  if (!currentWordFound) {
+    console.log('[showContextView] Current word not found in initial build, adjusting index...');
+    state.currentIndex = Math.max(0, Math.min(state.currentIndex, state.words.length - 1));
+    buildAllRows();
+  }
 
-  // Calculate current chunk and viewport
-  const currentChunkIndex = Math.floor(state.currentIndex / state.chunkSize);
-  const viewportChunks = 5; // Show 5 chunks total (2 before, current, 2 after)
+  // Calculate which chunk contains the current word
+  const currentChunkIndex = Math.floor(state.currentIndex / state.wordsPerRow);
+  const viewportChunks = 7; // Show more chunks around current position
   const startChunk = Math.max(0, currentChunkIndex - Math.floor(viewportChunks/2));
-  const endChunk = Math.min(state.chunkedData.length, startChunk + viewportChunks);
+  const endChunk = Math.min(state.allRows.length - 1, startChunk + viewportChunks);
 
-  // Calculate initial scroll position
-  let heightBeforeTarget = 0;
-  for (let i = 0; i < currentChunkIndex; i++) {
-    heightBeforeTarget += state.chunkedData[i].exactHeight;
+  // Pre-calculate scroll position
+  const container = document.getElementById('contextScrollArea');
+  const chunkHeight = 40; // Approximate height of each chunk
+  const scrollOffset = currentChunkIndex * chunkHeight;
+
+  // Initialize Clusterize with the correct scroll position
+  if (state.clusterize) {
+    // Set initial scroll position
+    state.clusterize.options.scroll_top = scrollOffset;
+    
+    // Force update with current rows
+    state.clusterize.update(state.allRows);
   }
-  
-  // Set initial styles
+
+  // Show the view
   cv.style.display = 'block';
-  content.style.cssText = `
-    padding: 0 20px;
-    box-sizing: border-box;
-    max-width: 800px;
-    margin: 0 auto;
-    line-height: 1.6;
-    height: calc(100vh - 60px);
-    overflow-y: auto;
-  `;
-
-  // Render initial chunks
-  let topPadding = 0;
-  for (let i = 0; i < startChunk; i++) {
-    topPadding += state.chunkedData[i].exactHeight;
-  }
-  
-  let bottomPadding = 0;
-  for (let i = endChunk; i < state.chunkedData.length; i++) {
-    bottomPadding += state.chunkedData[i].exactHeight;
-  }
-
-  const initialChunks = state.chunkedData.slice(startChunk, endChunk);
-  renderChunks(initialChunks, topPadding, bottomPadding);
-
-  // Show view and scroll to position
   requestAnimationFrame(() => {
     cv.classList.add('visible');
     
-    // Set initial scroll position
-    const offset = state.chunkedData[currentChunkIndex].exactHeight * 
-      ((state.currentIndex - state.chunkedData[currentChunkIndex].startIndex) / state.chunkSize);
-    content.scrollTop = heightBeforeTarget + offset - (content.clientHeight / 2);
-    
-    // After initial scroll, mark as done and highlight current word
+    // After view is visible, ensure scroll position and current word
     requestAnimationFrame(() => {
-      state.initialScrollDone = true;
-      scrollCurrentWordIntoView(false);
+      if (container) {
+        // Set initial scroll position
+        container.scrollTop = scrollOffset;
+        
+        // Ensure current word is visible and centered
+        setTimeout(() => {
+          const currentEl = document.querySelector('.current-word');
+          if (!currentEl) {
+            console.log('[showContextView] Current word element not found, retrying...');
+            scrollCurrentWordIntoView(false);
+          } else {
+            const containerRect = container.getBoundingClientRect();
+            const elementRect = currentEl.getBoundingClientRect();
+            const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
+            
+            container.scrollBy({
+              top: offset,
+              behavior: 'auto'
+            });
+          }
+          state.initialScrollDone = true;
+        }, 50);
+      }
     });
   });
 
+  // Update button state
   const btn = document.getElementById('contextModeButton');
   btn.classList.add('active');
   btn.innerHTML = `
@@ -1048,27 +1073,26 @@ function showContextView() {
 
 function hideContextView() {
   console.log('[hideContextView] Toggling OFF context view...');
-  state.contextViewActive = false;
   
+  state.contextViewActive = false;
   const cv = document.getElementById('contextView');
   cv.classList.remove('visible');
   
-  // Important: Set display none AFTER a short delay to allow transition
+  // Use transition duration from CSS
   setTimeout(() => {
-    if (!state.contextViewActive) { // Double check state hasn't changed
+    if (!state.contextViewActive) {
       cv.style.display = 'none';
+      
+      // Resume reading if it was active
+      if (state.wasPlayingBeforeContext) {
+        startReading();
+      }
     }
-  }, 300); // Match transition duration from CSS
+  }, 300); // Match CSS transition duration
 
-  if (state.wasPlayingBeforeContext) {
-    startReading();
-  }
   state.wasPlayingBeforeContext = false;
 
-  // Restore single-word display
-  document.getElementById('wordDisplay').textContent =
-    state.words[state.currentIndex] || '';
-
+  // Update button state
   const btn = document.getElementById('contextModeButton');
   btn.classList.remove('active');
   btn.innerHTML = `
@@ -1078,198 +1102,6 @@ function hideContextView() {
     </svg>
     <span>Context View</span>
   `;
-  console.log('[hideContextView] Context view hidden.');
-}
-
-
-/* ========================================================================
-   CONTEXT SCROLL & RENDER
-========================================================================= */
-function onContextScroll() {
-  if (!state.chunksMeasured) {
-    console.warn('[onContextScroll] Chunks not measured yet. Not rendering.');
-    return;
-  }
-  renderVisibleChunks();
-}
-
-function renderVisibleChunks() {
-  if (!state.contextViewActive) return;
-  
-  console.log('[renderVisibleChunks] Start...');
-  const container = document.getElementById('contextContent');
-  const scrollTop = container.scrollTop;
-  const viewHeight = container.clientHeight;
-
-  // Find current chunk
-  const currentChunkIndex = Math.floor(state.currentIndex / state.chunkSize);
-  
-  // If this is initial render, use the current chunk as anchor
-  if (!state.initialScrollDone) {
-    const viewportChunks = 5;
-    const startChunk = Math.max(0, currentChunkIndex - Math.floor(viewportChunks/2));
-    const endChunk = Math.min(state.chunkedData.length, startChunk + viewportChunks);
-    
-    let topPadding = 0;
-    for (let i = 0; i < startChunk; i++) {
-      topPadding += state.chunkedData[i].exactHeight;
-    }
-    
-    let bottomPadding = 0;
-    for (let i = endChunk; i < state.chunkedData.length; i++) {
-      bottomPadding += state.chunkedData[i].exactHeight;
-    }
-    
-    const chunks = state.chunkedData.slice(startChunk, endChunk);
-    renderChunks(chunks, topPadding, bottomPadding);
-    return;
-  }
-
-  // For normal scrolling, determine visible range based on scroll position
-  let startIndexChunk = 0;
-  let accumulated = 0;
-  
-  // Find first visible chunk
-  for (let i = 0; i < state.chunkedData.length; i++) {
-    if (accumulated > scrollTop - viewHeight) {
-      startIndexChunk = Math.max(0, i - 1); // Add one chunk buffer
-      break;
-    }
-    accumulated += state.chunkedData[i].exactHeight;
-  }
-
-  // Collect visible chunks plus buffer
-  const visibleChunks = [];
-  let usedHeight = 0;
-  let i = startIndexChunk;
-  
-  // Keep rendering chunks until we have enough height plus one chunk buffer
-  while (i < state.chunkedData.length && 
-         (usedHeight < viewHeight * 1.5 || i === currentChunkIndex)) {
-    visibleChunks.push(state.chunkedData[i]);
-    usedHeight += state.chunkedData[i].exactHeight;
-    i++;
-  }
-
-  // Always include the chunk with current word if nearby
-  if (!visibleChunks.some(c => c.startIndex <= state.currentIndex && c.endIndex > state.currentIndex)) {
-    const distance = Math.abs(currentChunkIndex - startIndexChunk);
-    if (distance <= 2) { // Only include if within 2 chunks
-      visibleChunks.push(state.chunkedData[currentChunkIndex]);
-      visibleChunks.sort((a, b) => a.startIndex - b.startIndex);
-    }
-  }
-
-  // Calculate paddings
-  let topPadding = 0;
-  for (let j = 0; j < startIndexChunk; j++) {
-    topPadding += state.chunkedData[j].exactHeight;
-  }
-  
-  let bottomPadding = 0;
-  for (let j = i; j < state.chunkedData.length; j++) {
-    bottomPadding += state.chunkedData[j].exactHeight;
-  }
-
-  // Save scroll position
-  const oldHeight = container.scrollHeight;
-  const oldScroll = container.scrollTop;
-  const oldClientHeight = container.clientHeight;
-
-  // Render chunks
-  renderChunks(visibleChunks, topPadding, bottomPadding);
-
-  // Restore scroll position accounting for height changes
-  if (oldHeight !== container.scrollHeight) {
-    const ratio = oldScroll / (oldHeight - oldClientHeight);
-    const newMax = container.scrollHeight - container.clientHeight;
-    container.scrollTop = ratio * newMax;
-  }
-}
-
-// Helper function to render chunks with given paddings
-function renderChunks(chunks, topPadding, bottomPadding) {
-  console.log(`[renderVisibleChunks] chunks=${chunks.length}, topPadding=${topPadding}, bottomPadding=${bottomPadding}`);
-
-  let finalHTML = '';
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const highlight = (
-      state.currentIndex >= chunk.startIndex && state.currentIndex < chunk.endIndex
-    );
-
-    chunk.html = buildChunkHTML(
-      state.words.slice(chunk.startIndex, chunk.endIndex),
-      chunk.startIndex,
-      highlight
-    );
-    finalHTML += `<div data-chunk-start="${chunk.startIndex}">${chunk.html}</div>`;
-  }
-
-  document.getElementById('chunksContainer').innerHTML = finalHTML;
-  document.getElementById('topSpacer').style.height = topPadding + 'px';
-  document.getElementById('bottomSpacer').style.height = bottomPadding + 'px';
-
-  console.log('[renderVisibleChunks] Render complete.');
-}
-
-function scrollCurrentWordIntoView(smooth) {
-  const doSmooth = (typeof smooth === 'boolean') ? smooth : true;
-  console.log(`[scrollCurrentWordIntoView] Called with smooth=${doSmooth}`);
-
-  // First ensure the chunk containing current word is rendered
-  const currentChunkIndex = Math.floor(state.currentIndex / state.chunkSize);
-  const container = document.getElementById('contextContent');
-  
-  requestAnimationFrame(() => {
-    let currentEl = document.querySelector('.current-word');
-    
-    // If current word not found, try to render its chunk first
-    if (!currentEl) {
-      console.log('[scrollCurrentWordIntoView] Current word not found, rendering its chunk...');
-      
-      const startChunk = Math.max(0, currentChunkIndex - 1);
-      const endChunk = Math.min(state.chunkedData.length, currentChunkIndex + 2);
-      
-      let topPadding = 0;
-      for (let i = 0; i < startChunk; i++) {
-        topPadding += state.chunkedData[i].exactHeight;
-      }
-      
-      let bottomPadding = 0;
-      for (let i = endChunk; i < state.chunkedData.length; i++) {
-        bottomPadding += state.chunkedData[i].exactHeight;
-      }
-      
-      const chunks = state.chunkedData.slice(startChunk, endChunk);
-      renderChunks(chunks, topPadding, bottomPadding);
-      
-      // Try to find current word again
-      currentEl = document.querySelector('.current-word');
-    }
-    
-    if (currentEl) {
-      // Get the element's position relative to the container
-      const elementRect = currentEl.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      
-      // Calculate where we want the element to be
-      const targetFromTop = (containerRect.height - elementRect.height) / 2;
-      
-      // Calculate the scroll adjustment needed
-      const adjustment = elementRect.top - containerRect.top - targetFromTop;
-      
-      // Smoothly scroll to center the element
-      container.scrollBy({
-        top: adjustment,
-        behavior: doSmooth ? 'smooth' : 'auto'
-      });
-      
-      console.log('[scrollCurrentWordIntoView] Scrolled current word into view.');
-    } else {
-      console.log('[scrollCurrentWordIntoView] No .current-word found.');
-    }
-  });
 }
 
 
@@ -1277,7 +1109,6 @@ function scrollCurrentWordIntoView(smooth) {
    CHAPTERS
 ========================================================================= */
 function toggleChaptersList() {
-  console.log('[toggleChaptersList] Toggle chapters list...');
   const list = document.getElementById('chaptersList');
   list.classList.toggle('visible');
   if (list.classList.contains('visible')) {
@@ -1286,14 +1117,13 @@ function toggleChaptersList() {
 }
 
 function updateChaptersList() {
-  console.log('[updateChaptersList] Building chapters list...');
   const list = document.getElementById('chaptersList');
   list.innerHTML = '';
 
   for (let i = 0; i < state.chapters.length; i++) {
     const chap = state.chapters[i];
     const nextPos = (i < state.chapters.length - 1)
-      ? state.chapters[i + 1].position
+      ? state.chapters[i+1].position
       : state.words.length;
 
     const inThisChapter =
@@ -1312,7 +1142,6 @@ function updateChaptersList() {
     div.className = 'chapter-item' + (inThisChapter ? ' current' : '');
     div.innerHTML = `${chap.title} <span style="float:right;">${progress}%</span>`;
     div.onclick = () => {
-      console.log(`[updateChaptersList] Jumping to chapter pos=${chap.position}`);
       jumpToChapter(chap.position);
     };
     list.appendChild(div);
@@ -1322,10 +1151,9 @@ function updateChaptersList() {
 function jumpToChapter(pos) {
   pushToUndoStack(state.currentIndex);
   state.currentIndex = pos;
-  console.log(`[jumpToChapter] Jumping to index=${pos}`);
   updateAllUI();
-  renderVisibleChunks();
-  scrollCurrentWordIntoView();
+  rebuildRowsAndRefreshCluster();
+  scrollIndexIntoView(pos);
   document.getElementById('chaptersList').classList.remove('visible');
 }
 
@@ -1342,20 +1170,6 @@ function findChapterForIndex(idx) {
   return null;
 }
 
-function getChapterIndexForWord(globalIndex) {
-  let cIndex = 0;
-  for (let i = 0; i < state.chapters.length; i++) {
-    const nextPos = (i < state.chapters.length - 1)
-      ? state.chapters[i+1].position
-      : state.words.length;
-    if (globalIndex >= state.chapters[i].position && globalIndex < nextPos) {
-      cIndex = i;
-      break;
-    }
-  }
-  return cIndex;
-}
-
 
 /* ========================================================================
    UNDO STACK
@@ -1365,21 +1179,17 @@ function pushToUndoStack(pos) {
   if (state.undoStack.length > 20) {
     state.undoStack.shift();
   }
-  console.log('[pushToUndoStack] Stack size now:', state.undoStack.length);
 }
 
 function undoLastPosition() {
   if (state.undoStack.length > 0) {
     const last = state.undoStack.pop();
-    console.log(`[undoLastPosition] Undoing to pos=${last}`);
     state.currentIndex = last;
     updateAllUI();
-    if (state.contextViewActive) {
-      renderVisibleChunks();
-      scrollCurrentWordIntoView();
+    if (state.contextViewActive && state.clusterize) {
+      rebuildRowsAndRefreshCluster();
+      scrollIndexIntoView(last);
     }
-  } else {
-    console.log('[undoLastPosition] No previous position in stack.');
   }
 }
 
@@ -1388,7 +1198,6 @@ function undoLastPosition() {
    THEME
 ========================================================================= */
 function setTheme(theme) {
-  console.log(`[setTheme] Setting theme to: ${theme}`);
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('reader-theme', theme);
 
@@ -1403,7 +1212,6 @@ function setTheme(theme) {
    PROGRESS NAV
 ========================================================================= */
 function setupProgressNav() {
-  console.log('[setupProgressNav] Initializing progress nav...');
   const nav = document.getElementById('progressNav');
   const fill = document.getElementById('progressNavFill');
   const tooltip = document.getElementById('progressNavTooltip');
@@ -1441,7 +1249,6 @@ function setupProgressNav() {
   }
 
   function onDragStart(e) {
-    console.log('[progressNav] Drag start');
     isDragging = true;
     if (state.isPlaying) {
       pauseReading();
@@ -1461,13 +1268,12 @@ function setupProgressNav() {
 
   function onDragEnd() {
     if (!isDragging) return;
-    console.log('[progressNav] Drag end');
     isDragging = false;
     saveProgress(false);
 
-    if (state.contextViewActive) {
-      renderVisibleChunks();
-      scrollCurrentWordIntoView(false);
+    if (state.contextViewActive && state.clusterize) {
+      rebuildRowsAndRefreshCluster();
+      scrollIndexIntoView(state.currentIndex);
     }
   }
 
@@ -1486,12 +1292,10 @@ function setupProgressNav() {
       const style = window.getComputedStyle(nav);
       const op = style.opacity;
       nav.style.opacity = (op === '1') ? '0' : '1';
-      console.log(`[progressNav] "N" pressed. Toggled nav opacity to: ${nav.style.opacity}`);
     }
   });
 
   tooltip.style.opacity = '1';
-  console.log('[setupProgressNav] Done.');
 }
 
 function updateProgressNav() {
@@ -1502,9 +1306,7 @@ function updateProgressNav() {
   const totalWords = document.getElementById('totalWords');
   const wordPreview = document.getElementById('wordPreview');
   
-  // Guard against any null elements
   if (!fill || !wordNumber || !totalWords || !wordPreview) {
-    console.warn('[updateProgressNav] Some elements not found. Skipping update.');
     return;
   }
 
@@ -1516,7 +1318,421 @@ function updateProgressNav() {
   totalWords.textContent = state.words.length.toString();
   wordPreview.textContent = state.words[state.currentIndex] || '';
 }
+
+function scrollCurrentWordIntoView(smooth = true) {
+  console.log(`[scrollCurrentWordIntoView] Called with smooth=${smooth}`);
+  
+  requestAnimationFrame(() => {
+    const currentEl = document.querySelector('.current-word');
+    const container = document.getElementById('contextScrollArea');
+    
+    if (!currentEl || !container) {
+      console.log('[scrollCurrentWordIntoView] No .current-word found or no container, rebuilding view...');
+      
+      // Force rebuild of rows
+      buildAllRows();
+      if (state.clusterize) {
+        state.clusterize.update(state.allRows);
+        
+        // Try scrolling again after rebuild, but with a delay to ensure DOM update
+        setTimeout(() => {
+          const rebuiltEl = document.querySelector('.current-word');
+          if (rebuiltEl && container) {
+            const containerRect = container.getBoundingClientRect();
+            const elementRect = rebuiltEl.getBoundingClientRect();
+            
+            // Calculate offset to center the element
+            const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
+            
+            container.scrollBy({
+              top: offset,
+              behavior: smooth ? 'smooth' : 'auto'
+            });
+            
+            // Highlight animation
+            rebuiltEl.style.animation = 'none';
+            rebuiltEl.offsetHeight; // Trigger reflow
+            rebuiltEl.style.animation = 'pulse 2s ease-in-out';
+          }
+        }, 50); // Small delay to ensure DOM update
+      }
+      return;
+    }
+    
+    const containerRect = container.getBoundingClientRect();
+    const elementRect = currentEl.getBoundingClientRect();
+    
+    // Calculate if element is in view
+    const isInView = (
+      elementRect.top >= containerRect.top &&
+      elementRect.bottom <= containerRect.bottom
+    );
+    
+    if (!isInView) {
+      // Center the element in view
+      const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
+      container.scrollBy({
+        top: offset,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+    }
+    
+    // Highlight animation
+    currentEl.style.animation = 'none';
+    currentEl.offsetHeight; // Trigger reflow
+    currentEl.style.animation = 'pulse 2s ease-in-out';
+  });
+}
+
+// Add the pulse animation to your CSS
+const style = document.createElement('style');
+style.textContent = `
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+`;
+document.head.appendChild(style);
+</script>
+
+<!-- Add Clusterize.js inline -->
+<script>
+/* Clusterize.js - v0.19.0 - 2020
+ http://NeXTs.github.com/Clusterize.js/
+ Copyright (c) 2015 Denis Lukov; Licensed MIT */
+
+;(function(name, definition) {
+    if (typeof module != 'undefined') module.exports = definition();
+    else if (typeof define == 'function' && typeof define.amd == 'object') define(definition);
+    else this[name] = definition();
+}('Clusterize', function() {
+  "use strict"
+
+  // Add IE detection
+  var ie = (function(){
+    var undef,rv = -1; // Return value assumes failure.
+    var ua = window.navigator.userAgent;
+    var msie = ua.indexOf('MSIE ');
+    var trident = ua.indexOf('Trident/');
+
+    if (msie > 0) {
+      // IE 10 or older => return version number
+      rv = parseInt(ua.substring(msie + 5, ua.indexOf('.', msie)), 10);
+    } else if (trident > 0) {
+      // IE 11 => return version number
+      var rvNum = ua.indexOf('rv:');
+      rv = parseInt(ua.substring(rvNum + 3, ua.indexOf('.', rvNum)), 10);
+    }
+
+    return ((rv > -1) ? rv : undef);
+  }());
+
+  var is_mac = navigator.platform.toLowerCase().indexOf('mac') + 1;
+  var Clusterize = function(data) {
+    if( ! (this instanceof Clusterize))
+      return new Clusterize(data);
+    var self = this;
+
+    var defaults = {
+      rows_in_block: 50,
+      blocks_in_cluster: 4,
+      tag: null,
+      show_no_data_row: true,
+      no_data_class: 'clusterize-no-data',
+      no_data_text: 'No data',
+      keep_parity: true,
+      callbacks: {}
+    }
+
+    // public parameters
+    self.options = {};
+    var options = ['rows_in_block', 'blocks_in_cluster', 'show_no_data_row', 'no_data_class', 'no_data_text', 'keep_parity', 'tag', 'callbacks'];
+    for(var i = 0, option; option = options[i]; i++) {
+      self.options[option] = typeof data[option] != 'undefined' && data[option] != null
+        ? data[option]
+        : defaults[option];
+    }
+
+    var elems = ['scroll', 'content'];
+    for(var i = 0, elem; elem = elems[i]; i++) {
+      self[elem + '_elem'] = data[elem + 'Id']
+        ? document.getElementById(data[elem + 'Id'])
+        : data[elem + 'Elem'];
+      if( ! self[elem + '_elem'])
+        throw new Error("Error! Could not find " + elem + " element");
+    }
+
+    // private parameters
+    var rows = isArray(data.rows)
+        ? data.rows
+        : self.fetchMarkup(),
+      cache = {},
+      scroll_top = self.scroll_elem.scrollTop;
+
+    // append initial data
+    self.insertToDOM(rows, cache);
+
+    // restore the scroll position
+    self.scroll_elem.scrollTop = scroll_top;
+
+    // adding scroll handler
+    var last_cluster = false,
+    scroll_debounce = 0,
+    pointer_events_set = false,
+    scrollEv = function() {
+      // fixes scrolling issue on Mac #3
+      if (is_mac) {
+          if( ! pointer_events_set) self.content_elem.style.pointerEvents = 'none';
+          pointer_events_set = true;
+          clearTimeout(scroll_debounce);
+          scroll_debounce = setTimeout(function () {
+              self.content_elem.style.pointerEvents = 'auto';
+              pointer_events_set = false;
+          }, 50);
+      }
+      if (last_cluster != (last_cluster = self.getClusterNum()))
+        self.insertToDOM(rows, cache);
+      if (self.options.callbacks.scrollingProgress)
+        self.options.callbacks.scrollingProgress(self.getScrollProgress());
+    },
+    resize_debounce = 0,
+    resizeEv = function() {
+      clearTimeout(resize_debounce);
+      resize_debounce = setTimeout(self.refresh, 100);
+    }
+    on('scroll', self.scroll_elem, scrollEv);
+    on('resize', window, resizeEv);
+
+    // public methods
+    self.destroy = function(clean) {
+      off('scroll', self.scroll_elem, scrollEv);
+      off('resize', window, resizeEv);
+      self.html((clean ? self.generateEmptyRow() : rows).join(''));
+    }
+    self.refresh = function(force) {
+      if(self.getRowsHeight(rows) || force) self.update(rows);
+    }
+    self.update = function(new_rows) {
+      rows = isArray(new_rows)
+        ? new_rows
+        : [];
+      var scroll_top = self.scroll_elem.scrollTop;
+      // fixes #39
+      if(rows.length * self.options.item_height < scroll_top) {
+        self.scroll_elem.scrollTop = 0;
+        last_cluster = 0;
+      }
+      self.insertToDOM(rows, cache);
+      self.scroll_elem.scrollTop = scroll_top;
+    }
+    self.clear = function() {
+      self.update([]);
+    }
+    self.getRowsAmount = function() {
+      return rows.length;
+    }
+    self.getScrollProgress = function() {
+      return this.options.scroll_top / (rows.length * this.options.item_height) * 100 || 0;
+    }
+
+    var add = function(where, _new_rows) {
+      var new_rows = isArray(_new_rows)
+        ? _new_rows
+        : [];
+      if( ! new_rows.length) return;
+      rows = where == 'append'
+        ? rows.concat(new_rows)
+        : new_rows.concat(rows);
+      self.insertToDOM(rows, cache);
+    }
+    self.append = function(rows) {
+      add('append', rows);
+    }
+    self.prepend = function(rows) {
+      add('prepend', rows);
+    }
+  }
+
+  Clusterize.prototype = {
+    constructor: Clusterize,
+    // fetch existing markup
+    fetchMarkup: function() {
+      var rows = [], rows_nodes = this.getChildNodes(this.content_elem);
+      while (rows_nodes.length) {
+        rows.push(rows_nodes.shift().outerHTML);
+      }
+      return rows;
+    },
+    // get tag name, content tag name, tag height, calc cluster height
+    exploreEnvironment: function(rows, cache) {
+      var opts = this.options;
+      opts.content_tag = this.content_elem.tagName.toLowerCase();
+      if( ! rows.length) return;
+      if(ie && ie <= 9 && ! opts.tag) opts.tag = rows[0].match(/<([^>\s/]*)/)[1].toLowerCase();
+      if(this.content_elem.children.length <= 1) cache.data = this.html(rows[0] + rows[0] + rows[0]);
+      if( ! opts.tag) opts.tag = this.content_elem.children[0].tagName.toLowerCase();
+      this.getRowsHeight(rows);
+    },
+    getRowsHeight: function(rows) {
+      var opts = this.options,
+        prev_item_height = opts.item_height;
+      opts.cluster_height = 0;
+      if( ! rows.length) return;
+      var nodes = this.content_elem.children;
+      if( ! nodes.length) return;
+      var node = nodes[Math.floor(nodes.length / 2)];
+      opts.item_height = node.offsetHeight;
+      // consider table's border-spacing
+      if(opts.tag == 'tr' && getStyle('borderCollapse', this.content_elem) != 'collapse')
+        opts.item_height += parseInt(getStyle('borderSpacing', this.content_elem), 10) || 0;
+      // consider margins (and margins collapsing)
+      if(opts.tag != 'tr') {
+        var marginTop = parseInt(getStyle('marginTop', node), 10) || 0;
+        var marginBottom = parseInt(getStyle('marginBottom', node), 10) || 0;
+        opts.item_height += Math.max(marginTop, marginBottom);
+      }
+      opts.block_height = opts.item_height * opts.rows_in_block;
+      opts.rows_in_cluster = opts.blocks_in_cluster * opts.rows_in_block;
+      opts.cluster_height = opts.blocks_in_cluster * opts.block_height;
+      return prev_item_height != opts.item_height;
+    },
+    // get current cluster number
+    getClusterNum: function () {
+      this.options.scroll_top = this.scroll_elem.scrollTop;
+      return Math.floor(this.options.scroll_top / (this.options.cluster_height - this.options.block_height)) || 0;
+    },
+    // generate empty row if no data provided
+    generateEmptyRow: function() {
+      var opts = this.options;
+      if( ! opts.tag || ! opts.show_no_data_row) return [];
+      var empty_row = document.createElement(opts.tag),
+        no_data_content = document.createTextNode(opts.no_data_text), td;
+      empty_row.className = opts.no_data_class;
+      if(opts.tag == 'tr') {
+        td = document.createElement('td');
+        // fixes #53
+        td.colSpan = 100;
+        td.appendChild(no_data_content);
+      }
+      empty_row.appendChild(td || no_data_content);
+      return [empty_row.outerHTML];
+    },
+    // generate cluster for current scroll position
+    generate: function (rows, cluster_num) {
+      var opts = this.options,
+        rows_len = rows.length;
+      if (rows_len < opts.rows_in_block) {
+        return {
+          top_offset: 0,
+          bottom_offset: 0,
+          rows_above: 0,
+          rows: rows_len ? rows : this.generateEmptyRow()
+        }
+      }
+      var items_start = Math.max((opts.rows_in_cluster - opts.rows_in_block) * cluster_num, 0),
+        items_end = items_start + opts.rows_in_cluster,
+        top_offset = Math.max(items_start * opts.item_height, 0),
+        bottom_offset = Math.max((rows_len - items_end) * opts.item_height, 0),
+        this_cluster_rows = [],
+        rows_above = items_start;
+      if(top_offset < 1) {
+        rows_above++;
+      }
+      for (var i = items_start; i < items_end; i++) {
+        rows[i] && this_cluster_rows.push(rows[i]);
+      }
+      return {
+        top_offset: top_offset,
+        bottom_offset: bottom_offset,
+        rows_above: rows_above,
+        rows: this_cluster_rows
+      }
+    },
+    renderExtraTag: function(class_name, height) {
+      var tag = document.createElement(this.options.tag),
+        clusterize_prefix = 'clusterize-';
+      tag.className = [clusterize_prefix + 'extra-row', clusterize_prefix + class_name].join(' ');
+      height && (tag.style.height = height + 'px');
+      return tag.outerHTML;
+    },
+    // if necessary verify data changed and insert to DOM
+    insertToDOM: function(rows, cache) {
+      // explore row's height
+      if( ! this.options.cluster_height) {
+        this.exploreEnvironment(rows, cache);
+      }
+      var data = this.generate(rows, this.getClusterNum()),
+        this_cluster_rows = data.rows.join(''),
+        this_cluster_content_changed = this.checkChanges('data', this_cluster_rows, cache),
+        top_offset_changed = this.checkChanges('top', data.top_offset, cache),
+        only_bottom_offset_changed = this.checkChanges('bottom', data.bottom_offset, cache),
+        callbacks = this.options.callbacks,
+        layout_start = callbacks.clusterWillChange || callbacks.clusterWillChange,
+        layout_end = callbacks.clusterChanged;
+      if(this_cluster_content_changed || top_offset_changed) {
+        if(data.top_offset) {
+          this_cluster_rows = this.renderExtraTag('top', data.top_offset) + this_cluster_rows;
+        }
+        if(data.bottom_offset) {
+          this_cluster_rows += this.renderExtraTag('bottom', data.bottom_offset);
+        }
+        layout_start && layout_start();
+        this.html(this_cluster_rows);
+        layout_end && layout_end();
+        this.options.content_tag == 'ol' && this.content_elem.setAttribute('start', data.rows_above);
+      } else if(only_bottom_offset_changed) {
+        this.content_elem.lastChild.style.height = data.bottom_offset + 'px';
+      }
+    },
+    // unfortunately ie <= 9 does not allow to use innerHTML for table elements, so make a workaround
+    html: function(data) {
+      var content_elem = this.content_elem;
+      if(ie && ie <= 9 && this.options.tag == 'tr') {
+        var div = document.createElement('div'), last;
+        div.innerHTML = '<table><tbody>' + data + '</tbody></table>';
+        while((last = content_elem.lastChild)) {
+          content_elem.removeChild(last);
+        }
+        var rows_nodes = this.getChildNodes(div.firstChild.firstChild);
+        while (rows_nodes.length) {
+          content_elem.appendChild(rows_nodes.shift());
+        }
+      } else {
+        content_elem.innerHTML = data;
+      }
+    },
+    getChildNodes: function(tag) {
+        var child_nodes = tag.children, nodes = [];
+        for (var i = 0, ii = child_nodes.length; i < ii; i++) {
+            nodes.push(child_nodes[i]);
+        }
+        return nodes;
+    },
+    checkChanges: function(type, value, cache) {
+      var changed = value != cache[type];
+      cache[type] = value;
+      return changed;
+    }
+  }
+
+  // support functions
+  function on(evt, element, fnc) {
+    return element.addEventListener ? element.addEventListener(evt, fnc, false) : element.attachEvent("on" + evt, fnc);
+  }
+  function off(evt, element, fnc) {
+    return element.removeEventListener ? element.removeEventListener(evt, fnc, false) : element.detachEvent("on" + evt, fnc);
+  }
+  function isArray(arr) {
+    return Object.prototype.toString.call(arr) === '[object Array]';
+  }
+  function getStyle(prop, elem) {
+    return window.getComputedStyle ? window.getComputedStyle(elem)[prop] : elem.currentStyle[prop];
+  }
+
+  // export
+  return Clusterize;
+}));
 </script>
 </body>
 </html>
-
