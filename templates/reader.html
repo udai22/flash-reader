@@ -1046,19 +1046,46 @@
       }
     }
 
+    function findChunkIndexForWord(wordIndex) {
+      // Helper to locate which chunk contains 'wordIndex'
+      for (let i = 0; i < state.chunkedData.length; i++) {
+        const chunk = state.chunkedData[i];
+        if (wordIndex >= chunk.startIndex && wordIndex < chunk.endIndex) {
+          return i;
+        }
+      }
+      return 0; // fallback, should not happen unless empty
+    }
+
     function showContextView() {
       state.wasPlayingBeforeContext = state.isPlaying;
       if (state.isPlaying) pauseReading();
       state.contextViewActive = true;
 
-      // Refresh the visible chunks so we highlight the correct word
+      // 1) Force the container to scroll to the chunk containing currentIndex
+      const container = document.getElementById('contextContent');
+      const chunkIndex = findChunkIndexForWord(state.currentIndex);
+      let offsetAbove = 0;
+      for (let i = 0; i < chunkIndex; i++) {
+        offsetAbove += state.chunkedData[i].approximateHeight;
+      }
+      // This ensures that chunk will be in the "visible range" after we render
+      container.scrollTop = offsetAbove;
+
+      // 2) Render chunks *after* setting scrollTop, so the correct chunk is visible
       renderVisibleChunks();
 
+      // Show the context view overlay
       const cv = document.getElementById('contextView');
       cv.classList.add('visible');
 
-      // scroll the current word into view
+      // 3) In the next frame, call scrollCurrentWordIntoView so highlight is visible
       requestAnimationFrame(() => {
+        // We might need to call renderVisibleChunks() again if the approximate
+        // offset was slightly off. Usually once is enough, but occasionally
+        // a second pass helps.
+        // renderVisibleChunks();
+
         scrollCurrentWordIntoView(false);
       });
 
