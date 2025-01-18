@@ -178,7 +178,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            touch-action: none; /* Disable browser touch handling */
+            touch-action: pan-y pinch-zoom;
         }
 
         /* Progress Bar */
@@ -231,7 +231,23 @@
             transition: opacity 0.3s ease;
         }
 
-        .context-view.visible ~ .word-display {
+        .word-boundary {
+            position: relative;
+            padding: 40px;
+            border-radius: 12px;
+            background: rgba(var(--bg-color-rgb), 0.1);
+            touch-action: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform: translateZ(0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            will-change: transform;
+        }
+
+        .context-view.visible ~ .word-boundary {
             display: none;
         }
 
@@ -243,30 +259,32 @@
             overflow-y: auto;
             visibility: hidden;
             opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease, visibility 0.3s;
             z-index: 9999;
             -webkit-overflow-scrolling: touch;
             height: 100vh;
             width: 100vw;
+            transition: opacity 0.3s ease, visibility 0.3s;
+            will-change: opacity, visibility;
+            transform: translateZ(0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
         }
 
         .context-view.visible {
             visibility: visible;
             opacity: 1;
-            pointer-events: auto;
         }
 
-        /* Hide main content when context view is active */
+        /* Remove pointer-events manipulation */
         .context-view.visible ~ .word-display,
         .context-view.visible ~ .progress-bar,
         .context-view.visible ~ .progress-info,
         .context-view.visible ~ .speed-control,
         .context-view.visible ~ .wpm-indicator {
             display: none;
-            pointer-events: none;
         }
 
+        /* Context Header - Ensure it's always interactive */
         .context-header {
             position: fixed;
             top: 0;
@@ -281,6 +299,9 @@
             z-index: 10000;
             border-bottom: 1px solid var(--progress-bg);
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transform: translateZ(0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
         }
 
         .context-content {
@@ -741,7 +762,7 @@
             display: none;
         }
 
-        /* Close button */
+        /* Close button - Ensure it's always clickable */
         .context-close-button {
             padding: 8px 12px;
             background: var(--surface-color);
@@ -756,12 +777,14 @@
             cursor: pointer;
             transition: all 0.2s ease;
             margin-left: auto;
-            pointer-events: auto;
             z-index: 10001;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
         }
 
-        .context-close-button:hover {
-            background: var(--progress-bg);
+        .context-close-button:active {
+            transform: scale(0.98);
+            background: var(--button-hover);
         }
 
         /* When context view is active, disable pointer events on reader container */
@@ -828,9 +851,11 @@
             <div><span id="progressPercent">0</span>%</div>
         </div>
 
-        <!-- Word Display -->
-        <div class="word-display" id="wordDisplay">
-            Tap to start reading
+        <!-- Word Display with Boundary -->
+        <div class="word-boundary" id="wordBoundary">
+            <div class="word-display" id="wordDisplay">
+                Tap to start reading
+            </div>
         </div>
 
         <!-- Context View -->
@@ -1024,15 +1049,31 @@
         // Event Listeners
         function setupEventListeners() {
             const container = document.querySelector('.reader-container');
+            const contextButton = document.getElementById('contextModeButton');
+            const wordBoundary = document.getElementById('wordBoundary');
+            const wordDisplay = document.getElementById('wordDisplay');
             
-            // Touch/click to start/pause
-            container.addEventListener('click', (e) => {
-                if (!state.contextViewActive) {
+            // Track pinch state
+            let activeTouches = [];
+            let initialDistance = 0;
+            let isPinching = false;
+            let touchStartTime = 0;
+            
+            // Touch/click to start/pause - only within word boundary
+            wordBoundary.addEventListener('click', (e) => {
+                if (!state.contextViewActive && !isPinching) {
                     toggleReading();
                 }
             });
 
-            // Keyboard controls
+            // Add explicit touch handling for context button
+            contextButton.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleContextMode();
+            });
+
+            // Keyboard controls remain unchanged
             document.addEventListener('keydown', (e) => {
                 switch (e.code) {
                     case 'Space':
@@ -1050,30 +1091,71 @@
                 }
             });
 
-            // Pinch zoom for font size
-            let initialDistance = 0;
-            container.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2) {
+            // Pinch zoom handling
+            wordBoundary.addEventListener('touchstart', (e) => {
+                touchStartTime = Date.now();
+                
+                // Store touch points
+                Array.from(e.touches).forEach(touch => {
+                    activeTouches.push({
+                        id: touch.identifier,
+                        x: touch.pageX,
+                        y: touch.pageY
+                    });
+                });
+
+                // Calculate initial distance for pinch
+                if (activeTouches.length === 2) {
+                    isPinching = true;
                     initialDistance = Math.hypot(
-                        e.touches[0].pageX - e.touches[1].pageX,
-                        e.touches[0].pageY - e.touches[1].pageY
+                        activeTouches[0].x - activeTouches[1].x,
+                        activeTouches[0].y - activeTouches[1].y
                     );
                 }
             });
 
-            container.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 2) {
-                    const distance = Math.hypot(
-                        e.touches[0].pageX - e.touches[1].pageX,
-                        e.touches[0].pageY - e.touches[1].pageY
+            wordBoundary.addEventListener('touchmove', (e) => {
+                if (activeTouches.length === 2) {
+                    e.preventDefault();
+                    
+                    // Get current touch positions
+                    const touch1 = e.touches[0];
+                    const touch2 = e.touches[1];
+                    
+                    // Calculate new distance
+                    const currentDistance = Math.hypot(
+                        touch1.pageX - touch2.pageX,
+                        touch1.pageY - touch2.pageY
                     );
-                    const scale = distance / initialDistance;
-                    const wordDisplay = document.getElementById('wordDisplay');
+                    
+                    // Calculate scale
+                    const scale = currentDistance / initialDistance;
                     const currentSize = parseInt(getComputedStyle(wordDisplay).fontSize);
                     const newSize = Math.min(Math.max(24, currentSize * scale), 72);
+                    
+                    // Apply new font size
                     wordDisplay.style.fontSize = `${newSize}px`;
-                    initialDistance = distance;
+                    initialDistance = currentDistance;
                 }
+            });
+
+            wordBoundary.addEventListener('touchend', (e) => {
+                // Clear touch tracking
+                activeTouches = [];
+                
+                // If this was a quick tap (not a pinch), allow click handler to work
+                const touchDuration = Date.now() - touchStartTime;
+                if (touchDuration < 200 && !isPinching) {
+                    isPinching = false;
+                    return;
+                }
+                
+                isPinching = false;
+            });
+
+            wordBoundary.addEventListener('touchcancel', () => {
+                activeTouches = [];
+                isPinching = false;
             });
         }
 
@@ -1251,13 +1333,11 @@
         function showContextView() {
             if (state.contextViewActive) return;
             
-            // Store reading state
+            // Store reading state and pause if needed
             state.wasPlayingBeforeContext = state.isPlaying;
             if (state.wasPlayingBeforeContext) {
                 pauseReading();
             }
-            
-            const contextView = document.getElementById('contextView');
             
             // Set context view as active
             state.contextViewActive = true;
@@ -1270,11 +1350,14 @@
             updateContextViewContent();
             
             // Show the context view
+            const contextView = document.getElementById('contextView');
             contextView.classList.add('visible');
-            document.body.style.overflow = 'hidden'; // Prevent background scrolling
             
-            // Center the current word with a slight delay to ensure content is rendered
-            setTimeout(() => {
+            // Prevent background scrolling
+            document.body.style.overflow = 'hidden';
+            
+            // Center the current word immediately
+            requestAnimationFrame(() => {
                 const currentWord = document.querySelector('.current-word');
                 if (currentWord) {
                     currentWord.scrollIntoView({ 
@@ -1282,10 +1365,13 @@
                         block: 'center'
                     });
                 }
-            }, 100);
+            });
             
             // Setup scroll listener
             setupInfiniteScroll();
+            
+            // Clear any lingering touch states
+            clearTouchStates();
         }
 
         function hideContextView() {
@@ -1293,8 +1379,13 @@
             
             // Update view state
             state.contextViewActive = false;
-            document.getElementById('contextView').classList.remove('visible');
-            document.body.style.overflow = ''; // Restore scrolling
+            
+            // Hide context view
+            const contextView = document.getElementById('contextView');
+            contextView.classList.remove('visible');
+            
+            // Restore scrolling
+            document.body.style.overflow = '';
             
             // Force synchronization of word display
             const wordDisplay = document.getElementById('wordDisplay');
@@ -1308,14 +1399,94 @@
             // Save progress
             saveProgress();
             
-            // Resume reading if it was playing before context view was opened
+            // Resume reading if it was playing before
             if (state.wasPlayingBeforeContext) {
                 requestAnimationFrame(() => {
                     startReading();
                 });
             }
-            state.wasPlayingBeforeContext = false; // Reset the state
+            state.wasPlayingBeforeContext = false;
+            
+            // Clear any lingering touch states
+            clearTouchStates();
         }
+
+        // Helper function to clear touch states
+        function clearTouchStates() {
+            if (state.holdTimeout) {
+                clearTimeout(state.holdTimeout);
+                state.holdTimeout = null;
+            }
+            state.hasMoved = false;
+            state.isScrolling = false;
+            state.activeTouches = [];
+            state.isPinching = false;
+        }
+
+        // Update context mode toggle
+        function toggleContextMode() {
+            const contextButton = document.getElementById('contextModeButton');
+            
+            if (state.contextViewActive) {
+                hideContextView();
+                contextButton.classList.remove('active');
+                contextButton.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <span>Context View</span>
+                `;
+            } else {
+                showContextView();
+                contextButton.classList.add('active');
+                contextButton.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    <span>Close View</span>
+                `;
+            }
+        }
+
+        // Initialize event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set up context close button
+            const closeButton = document.querySelector('.context-close-button');
+            if (closeButton) {
+                closeButton.removeAttribute('onclick');
+                
+                // Use click event for both desktop and mobile
+                closeButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    hideContextView();
+                });
+            }
+            
+            // Set up context mode button
+            const contextButton = document.getElementById('contextModeButton');
+            if (contextButton) {
+                contextButton.removeAttribute('onclick');
+                
+                contextButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    toggleContextMode();
+                });
+            }
+            
+            // Handle back navigation
+            window.addEventListener('popstate', () => {
+                if (state.contextViewActive) {
+                    hideContextView();
+                }
+            });
+            
+            // Handle visibility change
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && state.contextViewActive) {
+                    hideContextView();
+                }
+            });
+        });
 
         // Infinite Scroll Setup
         function setupInfiniteScroll() {
@@ -1936,30 +2107,6 @@
             document.getElementById('wordNumber').textContent = state.currentIndex;
             document.getElementById('totalWords').textContent = state.words.length;
             document.getElementById('wordPreview').textContent = state.words[state.currentIndex];
-        }
-
-        // Add context mode toggle function
-        function toggleContextMode() {
-            const contextButton = document.getElementById('contextModeButton');
-            if (state.contextViewActive) {
-                hideContextView();
-                contextButton.classList.remove('active');
-                contextButton.innerHTML = `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
-                    <span>Context View</span>
-                `;
-            } else {
-                showContextView();
-                contextButton.classList.add('active');
-                contextButton.innerHTML = `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                    <span>Close View</span>
-                `;
-            }
         }
     </script>
 </body>
