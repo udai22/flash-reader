@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ book.title }} - Virtual-Scroll Reader</title>
 
-  <!-- 1) Include Clusterize.js (CDN or local) -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/clusterize.js@0.19.2/clusterize.min.js"></script> -->
-
   <style>
     /* ====================== THEME VARIABLES ======================= */
     html[data-theme="light"] {
@@ -175,35 +172,11 @@
       font-weight: 500;
     }
 
-    /* ============= PROGRESS BAR & INFO ============= */
-    .progress-bar {
-      position: fixed;
-      left: 0; top: 0; bottom: 0;
-      width: 4px;
-      background: var(--progress-bg);
-      opacity: 0;
-      transition: opacity 0.3s;
+    /* Hide certain controls when context overlay is shown */
+    .context-view.visible ~ .theme-toggle,
+    .context-view.visible ~ .wpm-indicator {
+      display: none;
     }
-    .progress-bar.visible { opacity: 1; }
-    .progress-fill {
-      position: absolute;
-      bottom: 0;
-      width: 100%;
-      background: var(--progress-fill);
-      transition: height 0.3s;
-    }
-    .progress-info {
-      position: fixed;
-      left: 16px;
-      top: 16px;
-      background: var(--button-bg);
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .progress-info.visible { opacity: 1; }
 
     /* ============== CONTEXT VIEW OVERLAY ============== */
     .context-view {
@@ -402,15 +375,7 @@
       font-weight: 500;
     }
 
-    /* Hide controls when context overlay is shown */
-    .context-view.visible ~ .progress-bar,
-    .context-view.visible ~ .progress-info,
-    .context-view.visible ~ .theme-toggle,
-    .context-view.visible ~ .wpm-indicator {
-      display: none;
-    }
-
-    /* Improve table layout */
+    /* Improve table layout in context view */
     .clusterize table {
       width: 100%;
       border-collapse: collapse;
@@ -440,9 +405,15 @@
       <button class="theme-button" data-theme="sand">Sand</button>
     </div>
     <div class="wpm-controls">
+      <!-- Skip -50 words -->
+      <button onclick="jumpWords(-50)">-50</button>
+      <!-- WPM decrease -->
       <button onclick="updateWPM(state.currentWPM - 25)">-25</button>
       <div class="wpm-value"><span id="wpmValueTop">300</span> WPM</div>
+      <!-- WPM increase -->
       <button onclick="updateWPM(state.currentWPM + 25)">+25</button>
+      <!-- Skip +50 words -->
+      <button onclick="jumpWords(50)">+50</button>
     </div>
     <button class="context-mode-button" id="contextModeButton" onclick="toggleContextView()">
       <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
@@ -451,16 +422,6 @@
       </svg>
       <span>Context View</span>
     </button>
-  </div>
-
-  <!-- ============== PROGRESS BAR / INFO ============== -->
-  <div class="progress-bar" id="progressBar">
-    <div class="progress-fill" id="progressFill"></div>
-  </div>
-  <div class="progress-info" id="progressInfo">
-    <div>Chapter <span id="chapterNumber">1</span></div>
-    <div>Page <span id="pageNumber">1</span></div>
-    <div><span id="progressPercent">0</span>%</div>
   </div>
 
   <!-- ============== SINGLE WORD DISPLAY ============== -->
@@ -484,7 +445,7 @@
       <button class="context-close-button" onclick="hideContextView()">Close</button>
     </div>
 
-    <!-- 2) Clusterize requires a wrapper + two child elements (list + content) -->
+    <!-- Clusterize wrapper + table -->
     <div class="context-content-wrapper" id="contextScrollArea">
       <table class="clusterize" style="border-collapse:collapse;width:100%;">
         <tbody id="chunksContainer" class="clusterize-content"></tbody>
@@ -571,7 +532,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     setupProgressNav();
 
-    // 3) Initialize the Clusterize instance
+    // Initialize the Clusterize instance
     let clusterizeInitialized = false;
     state.clusterize = new Clusterize({
       scrollId: 'contextScrollArea',
@@ -631,7 +592,7 @@ function buildAllRows() {
   let currentWordFound = false;
 
   for (let i = 0; i < state.words.length; i++) {
-    // Insert chapter indicator
+    // Insert chapter indicator if needed
     if (chapterIndex < state.chapters.length && i === nextChapterPos) {
       if (rowWords.length > 0) {
         // Flush current row before chapter indicator
@@ -680,19 +641,15 @@ function buildAllRows() {
     }
   }
 
-  console.log(`[buildAllRows] Current word ${currentWordFound ? 'was' : 'was not'} found in rows`);
   return currentWordFound;
 }
 
-/** Whenever we jump or update the current index, we can rebuild or update rows. */
 function rebuildRowsAndRefreshCluster() {
   // Rebuild all rows with the new "current word" highlight
   buildAllRows();
   if (state.clusterize) {
-    // Tell Clusterize to set the new array
     state.clusterize.update(state.allRows);
   }
-  // Re-attach click events
   attachWordClickHandlers();
 }
 
@@ -704,7 +661,7 @@ function attachWordClickHandlers() {
   const container = document.getElementById('chunksContainer');
   if (!container) return;
 
-  // Remove existing handlers first
+  // Remove existing handlers by cloning
   const oldWords = container.querySelectorAll('.virtual-word, .current-word');
   oldWords.forEach(el => {
     const clone = el.cloneNode(true);
@@ -720,19 +677,19 @@ function attachWordClickHandlers() {
       if (!isNaN(newIndex) && newIndex !== state.currentIndex) {
         // Save current position for undo
         pushToUndoStack(state.currentIndex);
-        
+
         // Update position
         state.currentIndex = newIndex;
-        
+
         // Update UI
         updateAllUI();
-        
+
         // Rebuild cluster with new highlight
         buildAllRows();
         if (state.clusterize) {
           state.clusterize.update(state.allRows);
         }
-        
+
         // Scroll the new word into view
         requestAnimationFrame(() => {
           scrollCurrentWordIntoView(true);
@@ -749,10 +706,10 @@ function attachWordClickHandlers() {
 function scrollIndexIntoView(index) {
   // In clusterize, we can scroll to a specific row
   const rowNum = Math.floor(index / state.wordsPerRow);
-  if (state.clusterize) {
-    // “scrollTo” is not built-in in old versions, but we can do:
-    document.getElementById('contextScrollArea').scrollTop =
-      rowNum * 40; // estimate ~40px per row, or measure it
+  const container = document.getElementById('contextScrollArea');
+  if (container) {
+    // approx 40px per row or so; you can fine-tune as needed
+    container.scrollTop = rowNum * 40;
   }
 }
 
@@ -818,12 +775,11 @@ function updateAllUI() {
   const display = document.getElementById('wordDisplay');
   display.textContent = state.words[state.currentIndex] || '';
 
-  updateProgress();
+  // Update the right-edge progress bar
   updateProgressNav();
-  document.getElementById('wpmValueTop').textContent = state.currentWPM.toString();
 
-  const c = findChapterForIndex(state.currentIndex);
-  document.getElementById('chapterNumber').textContent = c ? c.title : 'N/A';
+  // WPM display
+  document.getElementById('wpmValueTop').textContent = state.currentWPM.toString();
 
   // Throttle saving
   saveProgress(false);
@@ -858,7 +814,6 @@ function startReading() {
     }
     state.currentIndex++;
     disp.textContent = state.words[state.currentIndex] || '';
-    updateProgress();
     updateProgressNav();
     saveProgress(false);
   }, intervalMS);
@@ -887,25 +842,6 @@ function jumpWords(offset) {
   if (state.contextViewActive && state.clusterize) {
     rebuildRowsAndRefreshCluster();
     scrollIndexIntoView(newIndex);
-  }
-}
-
-
-/* ========================================================================
-   PROGRESS INFO
-========================================================================= */
-function updateProgress() {
-  const fill = document.getElementById('progressFill');
-  const percentEl = document.getElementById('progressPercent');
-
-  if (state.words.length > 1) {
-    const ratio = state.currentIndex / (state.words.length - 1);
-    const pct = Math.round(ratio * 100);
-    fill.style.height = pct + '%';
-    percentEl.textContent = String(pct);
-  } else {
-    fill.style.height = '0%';
-    percentEl.textContent = '0';
   }
 }
 
@@ -984,70 +920,49 @@ function toggleContextView() {
 }
 
 function showContextView() {
-  console.log('[showContextView] Toggling ON context view...');
-  
   // Save reading state
   state.wasPlayingBeforeContext = state.isPlaying;
   if (state.isPlaying) {
     pauseReading();
   }
 
-  // Set active state
   state.contextViewActive = true;
   state.initialScrollDone = false;
-
   const cv = document.getElementById('contextView');
-  
-  // First rebuild rows and ensure current word is included
+
+  // Rebuild rows and ensure current word is included
   const currentWordFound = buildAllRows();
   if (!currentWordFound) {
-    console.log('[showContextView] Current word not found in initial build, adjusting index...');
     state.currentIndex = Math.max(0, Math.min(state.currentIndex, state.words.length - 1));
     buildAllRows();
   }
 
-  // Calculate which chunk contains the current word
   const currentChunkIndex = Math.floor(state.currentIndex / state.wordsPerRow);
-  const viewportChunks = 7; // Show more chunks around current position
+  const viewportChunks = 7;
   const startChunk = Math.max(0, currentChunkIndex - Math.floor(viewportChunks/2));
-  const endChunk = Math.min(state.allRows.length - 1, startChunk + viewportChunks);
-
-  // Pre-calculate scroll position
   const container = document.getElementById('contextScrollArea');
-  const chunkHeight = 40; // Approximate height of each chunk
+  const chunkHeight = 40;
   const scrollOffset = currentChunkIndex * chunkHeight;
 
-  // Initialize Clusterize with the correct scroll position
   if (state.clusterize) {
-    // Set initial scroll position
     state.clusterize.options.scroll_top = scrollOffset;
-    
-    // Force update with current rows
     state.clusterize.update(state.allRows);
   }
 
-  // Show the view
   cv.style.display = 'block';
   requestAnimationFrame(() => {
     cv.classList.add('visible');
-    
-    // After view is visible, ensure scroll position and current word
     requestAnimationFrame(() => {
       if (container) {
-        // Set initial scroll position
         container.scrollTop = scrollOffset;
-        
-        // Ensure current word is visible and centered
         setTimeout(() => {
           const currentEl = document.querySelector('.current-word');
           if (!currentEl) {
-            console.log('[showContextView] Current word element not found, retrying...');
             scrollCurrentWordIntoView(false);
           } else {
             const containerRect = container.getBoundingClientRect();
             const elementRect = currentEl.getBoundingClientRect();
             const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
-            
             container.scrollBy({
               top: offset,
               behavior: 'auto'
@@ -1059,7 +974,6 @@ function showContextView() {
     });
   });
 
-  // Update button state
   const btn = document.getElementById('contextModeButton');
   btn.classList.add('active');
   btn.innerHTML = `
@@ -1072,27 +986,21 @@ function showContextView() {
 }
 
 function hideContextView() {
-  console.log('[hideContextView] Toggling OFF context view...');
-  
   state.contextViewActive = false;
   const cv = document.getElementById('contextView');
   cv.classList.remove('visible');
-  
-  // Use transition duration from CSS
+
   setTimeout(() => {
     if (!state.contextViewActive) {
       cv.style.display = 'none';
-      
-      // Resume reading if it was active
       if (state.wasPlayingBeforeContext) {
         startReading();
       }
     }
-  }, 300); // Match CSS transition duration
+  }, 300);
 
   state.wasPlayingBeforeContext = false;
 
-  // Update button state
   const btn = document.getElementById('contextModeButton');
   btn.classList.remove('active');
   btn.innerHTML = `
@@ -1155,19 +1063,6 @@ function jumpToChapter(pos) {
   rebuildRowsAndRefreshCluster();
   scrollIndexIntoView(pos);
   document.getElementById('chaptersList').classList.remove('visible');
-}
-
-function findChapterForIndex(idx) {
-  for (let i = 0; i < state.chapters.length; i++) {
-    const chap = state.chapters[i];
-    const nextPos = (i < state.chapters.length - 1)
-      ? state.chapters[i+1].position
-      : state.words.length;
-    if (idx >= chap.position && idx < nextPos) {
-      return chap;
-    }
-  }
-  return null;
 }
 
 
@@ -1300,15 +1195,11 @@ function setupProgressNav() {
 
 function updateProgressNav() {
   if (state.words.length < 2) return;
-  
+
   const fill = document.getElementById('progressNavFill');
   const wordNumber = document.getElementById('wordNumber');
   const totalWords = document.getElementById('totalWords');
   const wordPreview = document.getElementById('wordPreview');
-  
-  if (!fill || !wordNumber || !totalWords || !wordPreview) {
-    return;
-  }
 
   const ratio = state.currentIndex / (state.words.length - 1);
   const pct = ratio * 100;
@@ -1320,71 +1211,60 @@ function updateProgressNav() {
 }
 
 function scrollCurrentWordIntoView(smooth = true) {
-  console.log(`[scrollCurrentWordIntoView] Called with smooth=${smooth}`);
-  
   requestAnimationFrame(() => {
     const currentEl = document.querySelector('.current-word');
     const container = document.getElementById('contextScrollArea');
-    
+
     if (!currentEl || !container) {
-      console.log('[scrollCurrentWordIntoView] No .current-word found or no container, rebuilding view...');
-      
-      // Force rebuild of rows
+      // Force rebuild if missing
       buildAllRows();
       if (state.clusterize) {
         state.clusterize.update(state.allRows);
-        
-        // Try scrolling again after rebuild, but with a delay to ensure DOM update
         setTimeout(() => {
           const rebuiltEl = document.querySelector('.current-word');
           if (rebuiltEl && container) {
             const containerRect = container.getBoundingClientRect();
             const elementRect = rebuiltEl.getBoundingClientRect();
-            
-            // Calculate offset to center the element
             const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
-            
+
             container.scrollBy({
               top: offset,
               behavior: smooth ? 'smooth' : 'auto'
             });
-            
-            // Highlight animation
+
+            // Simple highlight pulse
             rebuiltEl.style.animation = 'none';
             rebuiltEl.offsetHeight; // Trigger reflow
             rebuiltEl.style.animation = 'pulse 2s ease-in-out';
           }
-        }, 50); // Small delay to ensure DOM update
+        }, 50);
       }
       return;
     }
-    
+
+    // If the current word is out of view, center it
     const containerRect = container.getBoundingClientRect();
     const elementRect = currentEl.getBoundingClientRect();
-    
-    // Calculate if element is in view
-    const isInView = (
+    const isInView =
       elementRect.top >= containerRect.top &&
-      elementRect.bottom <= containerRect.bottom
-    );
-    
+      elementRect.bottom <= containerRect.bottom;
+
     if (!isInView) {
-      // Center the element in view
       const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
       container.scrollBy({
         top: offset,
         behavior: smooth ? 'smooth' : 'auto'
       });
     }
-    
-    // Highlight animation
+
+    // Highlight pulse
     currentEl.style.animation = 'none';
-    currentEl.offsetHeight; // Trigger reflow
+    currentEl.offsetHeight; // trigger reflow
     currentEl.style.animation = 'pulse 2s ease-in-out';
   });
 }
 
-// Add the pulse animation to your CSS
+// Add a quick "pulse" animation
 const style = document.createElement('style');
 style.textContent = `
 @keyframes pulse {
@@ -1396,38 +1276,30 @@ style.textContent = `
 document.head.appendChild(style);
 </script>
 
-<!-- Add Clusterize.js inline -->
+<!-- Inline Clusterize.js (unmodified) -->
 <script>
 /* Clusterize.js - v0.19.0 - 2020
- http://NeXTs.github.com/Clusterize.js/
- Copyright (c) 2015 Denis Lukov; Licensed MIT */
-
+   http://NeXTs.github.com/Clusterize.js/
+   Copyright (c) 2015 Denis Lukov; Licensed MIT */
 ;(function(name, definition) {
     if (typeof module != 'undefined') module.exports = definition();
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition);
     else this[name] = definition();
 }('Clusterize', function() {
   "use strict"
-
-  // Add IE detection
   var ie = (function(){
-    var undef,rv = -1; // Return value assumes failure.
+    var undef,rv = -1;
     var ua = window.navigator.userAgent;
     var msie = ua.indexOf('MSIE ');
     var trident = ua.indexOf('Trident/');
-
     if (msie > 0) {
-      // IE 10 or older => return version number
       rv = parseInt(ua.substring(msie + 5, ua.indexOf('.', msie)), 10);
     } else if (trident > 0) {
-      // IE 11 => return version number
       var rvNum = ua.indexOf('rv:');
       rv = parseInt(ua.substring(rvNum + 3, ua.indexOf('.', rvNum)), 10);
     }
-
     return ((rv > -1) ? rv : undef);
   }());
-
   var is_mac = navigator.platform.toLowerCase().indexOf('mac') + 1;
   var Clusterize = function(data) {
     if( ! (this instanceof Clusterize))
@@ -1445,11 +1317,10 @@ document.head.appendChild(style);
       callbacks: {}
     }
 
-    // public parameters
     self.options = {};
     var options = ['rows_in_block', 'blocks_in_cluster', 'show_no_data_row', 'no_data_class', 'no_data_text', 'keep_parity', 'tag', 'callbacks'];
     for(var i = 0, option; option = options[i]; i++) {
-      self.options[option] = typeof data[option] != 'undefined' && data[option] != null
+      self.options[option] = (typeof data[option] != 'undefined' && data[option] != null)
         ? data[option]
         : defaults[option];
     }
@@ -1463,33 +1334,27 @@ document.head.appendChild(style);
         throw new Error("Error! Could not find " + elem + " element");
     }
 
-    // private parameters
     var rows = isArray(data.rows)
         ? data.rows
         : self.fetchMarkup(),
       cache = {},
       scroll_top = self.scroll_elem.scrollTop;
 
-    // append initial data
     self.insertToDOM(rows, cache);
-
-    // restore the scroll position
     self.scroll_elem.scrollTop = scroll_top;
 
-    // adding scroll handler
     var last_cluster = false,
     scroll_debounce = 0,
     pointer_events_set = false,
     scrollEv = function() {
-      // fixes scrolling issue on Mac #3
       if (is_mac) {
-          if( ! pointer_events_set) self.content_elem.style.pointerEvents = 'none';
-          pointer_events_set = true;
-          clearTimeout(scroll_debounce);
-          scroll_debounce = setTimeout(function () {
-              self.content_elem.style.pointerEvents = 'auto';
-              pointer_events_set = false;
-          }, 50);
+        if( ! pointer_events_set) self.content_elem.style.pointerEvents = 'none';
+        pointer_events_set = true;
+        clearTimeout(scroll_debounce);
+        scroll_debounce = setTimeout(function () {
+          self.content_elem.style.pointerEvents = 'auto';
+          pointer_events_set = false;
+        }, 50);
       }
       if (last_cluster != (last_cluster = self.getClusterNum()))
         self.insertToDOM(rows, cache);
@@ -1504,7 +1369,6 @@ document.head.appendChild(style);
     on('scroll', self.scroll_elem, scrollEv);
     on('resize', window, resizeEv);
 
-    // public methods
     self.destroy = function(clean) {
       off('scroll', self.scroll_elem, scrollEv);
       off('resize', window, resizeEv);
@@ -1518,7 +1382,6 @@ document.head.appendChild(style);
         ? new_rows
         : [];
       var scroll_top = self.scroll_elem.scrollTop;
-      // fixes #39
       if(rows.length * self.options.item_height < scroll_top) {
         self.scroll_elem.scrollTop = 0;
         last_cluster = 0;
@@ -1535,7 +1398,6 @@ document.head.appendChild(style);
     self.getScrollProgress = function() {
       return this.options.scroll_top / (rows.length * this.options.item_height) * 100 || 0;
     }
-
     var add = function(where, _new_rows) {
       var new_rows = isArray(_new_rows)
         ? _new_rows
@@ -1553,10 +1415,8 @@ document.head.appendChild(style);
       add('prepend', rows);
     }
   }
-
   Clusterize.prototype = {
     constructor: Clusterize,
-    // fetch existing markup
     fetchMarkup: function() {
       var rows = [], rows_nodes = this.getChildNodes(this.content_elem);
       while (rows_nodes.length) {
@@ -1564,7 +1424,6 @@ document.head.appendChild(style);
       }
       return rows;
     },
-    // get tag name, content tag name, tag height, calc cluster height
     exploreEnvironment: function(rows, cache) {
       var opts = this.options;
       opts.content_tag = this.content_elem.tagName.toLowerCase();
@@ -1583,10 +1442,8 @@ document.head.appendChild(style);
       if( ! nodes.length) return;
       var node = nodes[Math.floor(nodes.length / 2)];
       opts.item_height = node.offsetHeight;
-      // consider table's border-spacing
       if(opts.tag == 'tr' && getStyle('borderCollapse', this.content_elem) != 'collapse')
         opts.item_height += parseInt(getStyle('borderSpacing', this.content_elem), 10) || 0;
-      // consider margins (and margins collapsing)
       if(opts.tag != 'tr') {
         var marginTop = parseInt(getStyle('marginTop', node), 10) || 0;
         var marginBottom = parseInt(getStyle('marginBottom', node), 10) || 0;
@@ -1597,12 +1454,10 @@ document.head.appendChild(style);
       opts.cluster_height = opts.blocks_in_cluster * opts.block_height;
       return prev_item_height != opts.item_height;
     },
-    // get current cluster number
     getClusterNum: function () {
       this.options.scroll_top = this.scroll_elem.scrollTop;
       return Math.floor(this.options.scroll_top / (this.options.cluster_height - this.options.block_height)) || 0;
     },
-    // generate empty row if no data provided
     generateEmptyRow: function() {
       var opts = this.options;
       if( ! opts.tag || ! opts.show_no_data_row) return [];
@@ -1611,14 +1466,12 @@ document.head.appendChild(style);
       empty_row.className = opts.no_data_class;
       if(opts.tag == 'tr') {
         td = document.createElement('td');
-        // fixes #53
         td.colSpan = 100;
         td.appendChild(no_data_content);
       }
       empty_row.appendChild(td || no_data_content);
       return [empty_row.outerHTML];
     },
-    // generate cluster for current scroll position
     generate: function (rows, cluster_num) {
       var opts = this.options,
         rows_len = rows.length;
@@ -1656,9 +1509,7 @@ document.head.appendChild(style);
       height && (tag.style.height = height + 'px');
       return tag.outerHTML;
     },
-    // if necessary verify data changed and insert to DOM
     insertToDOM: function(rows, cache) {
-      // explore row's height
       if( ! this.options.cluster_height) {
         this.exploreEnvironment(rows, cache);
       }
@@ -1668,8 +1519,9 @@ document.head.appendChild(style);
         top_offset_changed = this.checkChanges('top', data.top_offset, cache),
         only_bottom_offset_changed = this.checkChanges('bottom', data.bottom_offset, cache),
         callbacks = this.options.callbacks,
-        layout_start = callbacks.clusterWillChange || callbacks.clusterWillChange,
+        layout_start = callbacks.clusterWillChange,
         layout_end = callbacks.clusterChanged;
+
       if(this_cluster_content_changed || top_offset_changed) {
         if(data.top_offset) {
           this_cluster_rows = this.renderExtraTag('top', data.top_offset) + this_cluster_rows;
@@ -1685,7 +1537,6 @@ document.head.appendChild(style);
         this.content_elem.lastChild.style.height = data.bottom_offset + 'px';
       }
     },
-    // unfortunately ie <= 9 does not allow to use innerHTML for table elements, so make a workaround
     html: function(data) {
       var content_elem = this.content_elem;
       if(ie && ie <= 9 && this.options.tag == 'tr') {
@@ -1703,11 +1554,11 @@ document.head.appendChild(style);
       }
     },
     getChildNodes: function(tag) {
-        var child_nodes = tag.children, nodes = [];
-        for (var i = 0, ii = child_nodes.length; i < ii; i++) {
-            nodes.push(child_nodes[i]);
-        }
-        return nodes;
+      var child_nodes = tag.children, nodes = [];
+      for (var i = 0, ii = child_nodes.length; i < ii; i++) {
+        nodes.push(child_nodes[i]);
+      }
+      return nodes;
     },
     checkChanges: function(type, value, cache) {
       var changed = value != cache[type];
@@ -1716,7 +1567,6 @@ document.head.appendChild(style);
     }
   }
 
-  // support functions
   function on(evt, element, fnc) {
     return element.addEventListener ? element.addEventListener(evt, fnc, false) : element.attachEvent("on" + evt, fnc);
   }
@@ -1730,7 +1580,6 @@ document.head.appendChild(style);
     return window.getComputedStyle ? window.getComputedStyle(elem)[prop] : elem.currentStyle[prop];
   }
 
-  // export
   return Clusterize;
 }));
 </script>
