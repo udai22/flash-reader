@@ -94,14 +94,14 @@
       left: 0;
       right: 0;
       bottom: 0;
-      height: 90px;
+      height: 60px;
       background: var(--surface-color);
       box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 24px;
-      padding: 0 16px;
+      gap: 12px;
+      padding: 0 8px;
       z-index: 10002;
     }
     .control-group {
@@ -111,20 +111,20 @@
     }
     /* Use existing button styles for controls */
     .control-group button {
-      padding: 8px 12px;
+      padding: 6px 10px;
       background: var(--button-bg);
       color: var(--text-color);
       border: 1px solid var(--progress-bg);
       border-radius: 8px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 12px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     /* WPM value display */
     .wpm-value {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
-      min-width: 70px;
+      min-width: 50px;
       text-align: center;
     }
     /* Theme dropdown styling matching original buttons */
@@ -133,13 +133,13 @@
       display: inline-block;
     }
     .theme-dropdown-button {
-      padding: 8px 12px;
+      padding: 6px 10px;
       background: var(--button-bg);
       color: var(--text-color);
       border: 1px solid var(--progress-bg);
       border-radius: 8px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 12px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .theme-dropdown-menu {
@@ -411,6 +411,30 @@
       50% { transform: scale(1.1); }
       100% { transform: scale(1); }
     }
+
+    @media (max-width: 600px) {
+      .bottom-bar {
+        height: 60px; /* Reduced height for mobile */
+        padding: 0 8px; /* Adjusted padding */
+        gap: 12px; /* Reduced gap between elements */
+      }
+      
+      .bottom-bar .control-group button {
+        padding: 6px 10px; /* Smaller buttons */
+        font-size: 12px; /* Smaller font size */
+      }
+      
+      .bottom-bar .wpm-value {
+        font-size: 14px; /* Smaller WPM display */
+        min-width: 50px; /* Adjusted width */
+      }
+      
+      .bottom-bar .theme-dropdown-button,
+      .bottom-bar .context-mode-button {
+        padding: 6px 10px; /* Smaller padding for dropdown and context buttons */
+        font-size: 12px; /* Smaller font size */
+      }
+    }
   </style>
 </head>
 <body>
@@ -511,61 +535,60 @@ const state = {
   allRows: [],
   wordsPerRow: 10,
   saveTimeout: null,
+  initialScrollDone: false,
 };
 
 /* ========================================================================
    MAIN SETUP
 ========================================================================= */
 document.addEventListener('DOMContentLoaded', async () => {
+  console.log('[DEBUG] DOM fully loaded. Starting initialization...');
   try {
     if (document.fonts && document.fonts.ready) {
       await document.fonts.ready.catch(() => {});
+      console.log('[DEBUG] Fonts loaded or font loading not supported.');
     }
+
+    console.log('[DEBUG] Fetching book content from /api/book/{{ book.id }}/content');
     const resp = await fetch(`/api/book/{{ book.id }}/content`);
     if (!resp.ok) {
-      throw new Error('Failed to fetch book content');
+      throw new Error('[ERROR] Failed to fetch book content');
     }
     const data = await resp.json();
+    console.log('[DEBUG] Book content fetched:', data);
+
+    // Log current_position from server
+    console.log('[DEBUG] data.current_position (raw):', data.current_position);
+
     const rawContent = data.content || '';
     const tokens = rawContent.match(/\w+|\S/g) || [];
     state.words = tokens;
-    const pos = parseInt(data.current_position, 10) || 0;
+    console.log(`[DEBUG] Parsed words array of length: ${state.words.length}`);
+
+    const parsedPosition = parseInt(data.current_position, 10);
+    console.log('[DEBUG] parseInt(data.current_position):', parsedPosition);
+
+    // Fallback to 0 if parsedPosition is invalid
+    const pos = parsedPosition || 0;
+    console.log('[DEBUG] pos after fallback to 0 if invalid:', pos);
+
+    // Bound the position
     state.currentIndex = Math.min(Math.max(pos, 0), state.words.length - 1);
+    console.log('[DEBUG] Final state.currentIndex after bounding:', state.currentIndex);
+
     state.chapters = data.chapters || [];
+    console.log('[DEBUG] Chapters loaded:', state.chapters);
+
     buildAllRows();
     updateAllUI();
     setupEventListeners();
     setupProgressNav();
-    let clusterizeInitialized = false;
-    state.clusterize = new Clusterize({
-      scrollId: 'contextScrollArea',
-      contentId: 'chunksContainer',
-      rows: state.allRows,
-      no_data_text: 'No data',
-      rows_in_block: 50,
-      blocks_in_cluster: 4,
-      callbacks: {
-        clusterWillChange: function() {
-          if (clusterizeInitialized) {
-            const container = document.getElementById('contextScrollArea');
-            if (container && state.clusterize) {
-              state.clusterize.options.scroll_top = container.scrollTop;
-            }
-          }
-        },
-        clusterChanged: function() {
-          if (state.contextViewActive) {
-            attachWordClickHandlers();
-            if (!state.initialScrollDone) {
-              scrollCurrentWordIntoView(false);
-            }
-          }
-        }
-      }
-    });
-    clusterizeInitialized = true;
+
+    // Initialize Clusterize
+    state.clusterize = initializeClusterize();
+    console.log('[DEBUG] Clusterize initialized successfully.');
   } catch (err) {
-    console.error('Error during initialization:', err);
+    console.error('[ERROR] Initialization failed:', err);
   }
 });
 
@@ -573,56 +596,60 @@ document.addEventListener('DOMContentLoaded', async () => {
    BUILDING ROWS FOR CLUSTERIZE
 ========================================================================= */
 function buildAllRows() {
+  console.log('[DEBUG] buildAllRows() invoked. currentIndex=', state.currentIndex);
+
+  // Clear out the allRows array first
   state.allRows = [];
-  let chapterIndex = 0;
-  let nextChapterPos = (state.chapters.length) ? state.chapters[0].position : -1;
-  let chapterTitle = (state.chapters.length) ? state.chapters[0].title : null;
-  state.wordsPerRow = 22;
-  let rowWords = [];
+
+  let rowContent = [];
+  let rowHTML = '';
+  let rowStartIndex = 0;
   let currentWordFound = false;
+
+  // For demonstration, assume wordsPerRow is set in state
+  const perRow = state.wordsPerRow > 0 ? state.wordsPerRow : 10;
+  console.log(`[DEBUG] buildAllRows(): state.wordsPerRow=${perRow}, totalWords=${state.words.length}`);
+
+  // Build rows by grouping words
   for (let i = 0; i < state.words.length; i++) {
-    if (chapterIndex < state.chapters.length && i === nextChapterPos) {
-      if (rowWords.length > 0) {
-        const rowHTML = rowWords.map(({ word, index }) => {
-          const isCurrentWord = index === state.currentIndex;
-          if (isCurrentWord) currentWordFound = true;
-          const cls = isCurrentWord ? 'current-word' : 'virtual-word';
-          return `<span class="${cls}" data-index="${index}">${word}</span>`;
-        }).join(' ');
-        state.allRows.push(`<tr><td>${rowHTML}</td></tr>`);
-        rowWords = [];
-      }
-      state.allRows.push(`
-        <tr><td>
-          <div class="chapter-indicator">${chapterTitle}</div>
-        </td></tr>
-      `);
-      chapterIndex++;
-      if (chapterIndex < state.chapters.length) {
-        nextChapterPos = state.chapters[chapterIndex].position;
-        chapterTitle = state.chapters[chapterIndex].title;
-      } else {
-        nextChapterPos = -1;
-      }
+    rowContent.push(state.words[i]);
+
+    // If this is the word that matches currentIndex, we mark it
+    if (i === state.currentIndex) {
+      currentWordFound = true;
     }
-    rowWords.push({ word: state.words[i], index: i });
-    if (rowWords.length >= state.wordsPerRow || i === state.words.length - 1) {
-      const rowHTML = rowWords.map(({ word, index }) => {
-        const isCurrentWord = index === state.currentIndex;
-        if (isCurrentWord) currentWordFound = true;
-        const cls = isCurrentWord ? 'current-word' : 'virtual-word';
-        return `<span class="${cls}" data-index="${index}">${word}</span>`;
-      }).join(' ');
-      state.allRows.push(`<tr><td>${rowHTML}</td></tr>`);
-      rowWords = [];
+
+    if ((rowContent.length === perRow) || (i === state.words.length - 1)) {
+      // Create a row HTML
+      let row = '';
+      const rowIndex = rowStartIndex / perRow;
+      for (let j = 0; j < rowContent.length; j++) {
+        const wordIdx = rowStartIndex + j;
+        const isCurrent = (wordIdx === state.currentIndex);
+        row += `<span class="${isCurrent ? 'current-word' : 'virtual-word'}" data-index="${wordIdx}">${rowContent[j]}</span> `;
+      }
+
+      rowHTML = `<div class="row" data-row-index="${rowIndex}">${row}</div>`;
+      state.allRows.push(rowHTML);
+
+      // Reset for next row
+      rowContent = [];
+      rowStartIndex = i + 1;
     }
   }
+
+  console.log(`[DEBUG] buildAllRows() completed. totalRows=${state.allRows.length}, currentWordFound=${currentWordFound}`);
+
+  // Return true/false so you can see if the current word was found
   return currentWordFound;
 }
+
 function rebuildRowsAndRefreshCluster() {
+  console.log('[DEBUG] rebuildRowsAndRefreshCluster() called.');
   buildAllRows();
   if (state.clusterize) {
     state.clusterize.update(state.allRows);
+    console.log('[DEBUG] state.clusterize updated with new rows.');
   }
   attachWordClickHandlers();
 }
@@ -631,29 +658,45 @@ function rebuildRowsAndRefreshCluster() {
    CLICK EVENTS ON WORDS (in Context View)
 ========================================================================= */
 function attachWordClickHandlers() {
+  console.log('[DEBUG] attachWordClickHandlers() invoked.');
   const container = document.getElementById('chunksContainer');
-  if (!container) return;
-  const oldWords = container.querySelectorAll('.virtual-word, .current-word');
-  oldWords.forEach(el => {
-    const clone = el.cloneNode(true);
-    el.parentNode.replaceChild(clone, el);
-  });
+  if (!container) {
+    console.error('[ERROR] chunksContainer not found in attachWordClickHandlers.');
+    return;
+  }
+  
   const words = container.querySelectorAll('.virtual-word, .current-word');
   words.forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.preventDefault();
+    // Remove any existing click handlers
+    const newEl = el.cloneNode(true);
+    el.parentNode.replaceChild(newEl, el);
+    
+    newEl.addEventListener('click', (e) => {
       const newIndex = parseInt(e.target.dataset.index, 10);
+      console.log(`[DEBUG] Word clicked. newIndex=${newIndex}, oldIndex=${state.currentIndex}`);
       if (!isNaN(newIndex) && newIndex !== state.currentIndex) {
         pushToUndoStack(state.currentIndex);
         state.currentIndex = newIndex;
         updateAllUI();
+        
+        // Update the display immediately
+        const display = document.getElementById('wordDisplay');
+        display.textContent = state.words[newIndex] || '';
+        
+        // Update the context view
         buildAllRows();
         if (state.clusterize) {
           state.clusterize.update(state.allRows);
+          
+          // Scroll after a short delay to ensure DOM is updated
+          setTimeout(() => {
+            const currentEl = document.querySelector('.current-word');
+            if (currentEl) {
+              currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              console.log('[DEBUG] Scrolled to clicked word');
+            }
+          }, 50);
         }
-        requestAnimationFrame(() => {
-          scrollCurrentWordIntoView(true);
-        });
       }
     });
   });
@@ -663,10 +706,13 @@ function attachWordClickHandlers() {
    SCROLLING A PARTICULAR INDEX INTO VIEW
 ========================================================================= */
 function scrollIndexIntoView(index) {
+  console.log(`[DEBUG] scrollIndexIntoView() index=${index}`);
   const rowNum = Math.floor(index / state.wordsPerRow);
   const container = document.getElementById('contextScrollArea');
   if (container) {
-    container.scrollTop = rowNum * 40;
+    const scrollAmount = rowNum * 40; 
+    container.scrollTop = scrollAmount;
+    console.log(`[DEBUG] scrollIndexIntoView() set scrollTop to: ${scrollAmount}`);
   }
 }
 
@@ -674,13 +720,17 @@ function scrollIndexIntoView(index) {
    EVENT LISTENERS & UI
 ========================================================================= */
 function setupEventListeners() {
+  console.log('[DEBUG] setupEventListeners()');
   const wb = document.getElementById('wordBoundary');
   wb.addEventListener('click', () => {
+    console.log('[DEBUG] wordBoundary clicked.');
     if (!state.contextViewActive) {
       toggleReading();
     }
   });
+
   document.addEventListener('keydown', (e) => {
+    console.log(`[DEBUG] Key pressed: ${e.code}`);
     switch (e.code) {
       case 'Space':
         e.preventDefault();
@@ -711,15 +761,20 @@ function setupEventListeners() {
         jumpWords(100);
         break;
       default:
+        console.log('[DEBUG] Unhandled key:', e.code);
         break;
     }
   });
+  console.log('[DEBUG] Event listeners set up complete.');
 }
+
 function updateAllUI() {
   const display = document.getElementById('wordDisplay');
   display.textContent = state.words[state.currentIndex] || '';
+  console.log(`[DEBUG] updateAllUI(), wordDisplay set to: "${display.textContent}", currentIndex=${state.currentIndex}`);
   updateProgressNav();
   document.getElementById('wpmValueTop').textContent = state.currentWPM.toString();
+  console.log(`[DEBUG] WPM display updated to: ${state.currentWPM}`);
   saveProgress(false);
 }
 
@@ -727,6 +782,7 @@ function updateAllUI() {
    READING CONTROL
 ========================================================================= */
 function toggleReading() {
+  console.log('[DEBUG] toggleReading() - state.isPlaying:', state.isPlaying);
   if (state.isPlaying) {
     pauseReading();
     document.getElementById('progressNavTooltip').style.opacity = '1';
@@ -735,14 +791,18 @@ function toggleReading() {
     document.getElementById('progressNavTooltip').style.opacity = '0';
   }
 }
+
 function startReading() {
+  console.log('[DEBUG] startReading() called.');
   pauseReading();
   state.isPlaying = true;
   const intervalMS = 60000 / state.currentWPM;
   const disp = document.getElementById('wordDisplay');
   disp.textContent = state.words[state.currentIndex] || '';
+  console.log(`[DEBUG] Reading interval set to ${intervalMS} ms, starting from index=${state.currentIndex}.`);
   state.readingInterval = setInterval(() => {
     if (state.currentIndex >= state.words.length - 1) {
+      console.log('[DEBUG] Reached end of words, pausing.');
       pauseReading();
       return;
     }
@@ -752,19 +812,24 @@ function startReading() {
     saveProgress(false);
   }, intervalMS);
 }
+
 function pauseReading() {
+  console.log('[DEBUG] pauseReading() called. Clearing interval if exists.');
   state.isPlaying = false;
   if (state.readingInterval) {
     clearInterval(state.readingInterval);
     state.readingInterval = null;
   }
 }
+
 function jumpWords(offset) {
+  console.log(`[DEBUG] jumpWords(${offset}). currentIndex before jump: ${state.currentIndex}`);
   const oldIndex = state.currentIndex;
   let newIndex = oldIndex + offset;
   newIndex = Math.max(0, Math.min(newIndex, state.words.length - 1));
   pushToUndoStack(oldIndex);
   state.currentIndex = newIndex;
+  console.log(`[DEBUG] jumpWords: newIndex=${newIndex}`);
   updateAllUI();
   if (state.isPlaying) {
     pauseReading();
@@ -780,6 +845,7 @@ function jumpWords(offset) {
    SAVE PROGRESS
 ========================================================================= */
 function saveProgress(immediate) {
+  console.log(`[DEBUG] saveProgress(immediate=${immediate}).`);
   if (immediate) {
     doSaveProgress();
     return;
@@ -791,17 +857,25 @@ function saveProgress(immediate) {
     doSaveProgress();
   }, 1000);
 }
+
 async function doSaveProgress() {
+  console.log(`[DEBUG] doSaveProgress(): position=${state.currentIndex}, wpm=${state.currentWPM}`);
   localStorage.setItem('reader-wpm', state.currentWPM);
   localStorage.setItem(`book-{{ book.id }}-position`, state.currentIndex);
+
+  console.log('[DEBUG] About to POST progress to the server:', {
+    position: state.currentIndex,
+    wpm: state.currentWPM
+  });
   try {
     await fetch(`/api/book/{{ book.id }}/position`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ position: state.currentIndex, wpm: state.currentWPM })
     });
+    console.log('[DEBUG] Progress successfully saved on server.');
   } catch (err) {
-    console.warn('Could not save progress:', err);
+    console.warn('[WARN] Could not save progress:', err);
   }
 }
 
@@ -810,6 +884,7 @@ async function doSaveProgress() {
 ========================================================================= */
 let wpmIndicatorTimer;
 function updateWPM(val) {
+  console.log(`[DEBUG] updateWPM(${val}). Current WPM: ${state.currentWPM}`);
   const w = Math.max(state.minWPM, Math.min(state.maxWPM, val));
   state.currentWPM = w;
   document.getElementById('wpmValueTop').textContent = String(w);
@@ -820,6 +895,7 @@ function updateWPM(val) {
     startReading();
   }
 }
+
 function showWPMIndicator() {
   const ind = document.getElementById('wpmIndicator');
   ind.classList.add('visible');
@@ -835,89 +911,144 @@ function showWPMIndicator() {
    CONTEXT VIEW TOGGLE
 ========================================================================= */
 function toggleContextView() {
+  console.log('[DEBUG] toggleContextView() - currently active:', state.contextViewActive);
   if (state.contextViewActive) {
     hideContextView();
   } else {
     showContextView();
   }
 }
+
 function showContextView() {
-  state.wasPlayingBeforeContext = state.isPlaying;
-  if (state.isPlaying) {
-    pauseReading();
-  }
-  state.contextViewActive = true;
-  state.initialScrollDone = false;
-  const cv = document.getElementById('contextView');
-  const currentWordFound = buildAllRows();
-  if (!currentWordFound) {
-    state.currentIndex = Math.max(0, Math.min(state.currentIndex, state.words.length - 1));
-    buildAllRows();
-  }
-  const currentChunkIndex = Math.floor(state.currentIndex / state.wordsPerRow);
-  const container = document.getElementById('contextScrollArea');
-  const chunkHeight = 40;
-  const scrollOffset = currentChunkIndex * chunkHeight;
-  if (state.clusterize) {
-    state.clusterize.options.scroll_top = scrollOffset;
-    state.clusterize.update(state.allRows);
-  }
-  cv.style.display = 'block';
-  requestAnimationFrame(() => {
-    cv.classList.add('visible');
-    requestAnimationFrame(() => {
-      if (container) {
-        container.scrollTop = scrollOffset;
-        setTimeout(() => {
-          const currentEl = document.querySelector('.current-word');
-          if (!currentEl) {
-            scrollCurrentWordIntoView(false);
-          } else {
-            const containerRect = container.getBoundingClientRect();
-            const elementRect = currentEl.getBoundingClientRect();
-            const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
-            container.scrollBy({
-              top: offset,
-              behavior: 'auto'
-            });
+  try {
+    console.log('[DEBUG] showContextView()');
+    state.wasPlayingBeforeContext = state.isPlaying;
+    if (state.isPlaying) {
+      console.log('[DEBUG] showContextView() - pausing reading since isPlaying=true.');
+      pauseReading();
+    }
+    
+    state.contextViewActive = true;
+    state.initialScrollDone = false;
+    const cv = document.getElementById('contextView');
+    
+    // 1. First build the rows
+    console.log('[DEBUG] Rebuilding rows for context view...');
+    const currentWordFound = buildAllRows();
+    
+    if (!currentWordFound) {
+      console.log('[DEBUG] currentWordFound=false, bounding currentIndex again...');
+      state.currentIndex = Math.max(0, Math.min(state.currentIndex, state.words.length - 1));
+      buildAllRows();
+    }
+
+    // 2. Calculate the target scroll position more accurately
+    const wordsPerCluster = state.wordsPerRow * state.clusterize.options.rows_in_block;
+    const currentCluster = Math.floor(state.currentIndex / wordsPerCluster);
+    const targetScrollTop = currentCluster * (state.clusterize.options.rows_in_block * 40);
+    
+    // 3. Make the context view visible first
+    cv.style.display = 'block';
+    
+    // 4. Set up a promise to handle the view transition
+    const transitionComplete = new Promise(resolve => {
+      requestAnimationFrame(() => {
+        cv.classList.add('visible');
+        // Wait for transition to complete
+        setTimeout(resolve, 300);
+      });
+    });
+
+    // 5. Set up a promise for Clusterize update
+    const clusterizeUpdate = new Promise(resolve => {
+      if (state.clusterize) {
+        console.log('[DEBUG] showContextView() - updating clusterize with new rows.');
+        state.clusterize.options.callbacks.clusterChanged = function() {
+          if (state.contextViewActive) {
+            console.log('[DEBUG] clusterChanged callback fired while context view active.');
+            attachWordClickHandlers();
+            resolve();
           }
-          state.initialScrollDone = true;
-        }, 50);
+        };
+        state.clusterize.options.scroll_top = targetScrollTop;
+        state.clusterize.update(state.allRows);
+      } else {
+        resolve();
       }
     });
-  });
-  const btn = document.getElementById('contextModeButton');
-  btn.classList.add('active');
-  btn.innerHTML = `
-    <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M6 18L18 6M6 6l12 12"/>
-    </svg>
-    <span>Close View</span>
-  `;
-}
-function hideContextView() {
-  state.contextViewActive = false;
-  const cv = document.getElementById('contextView');
-  cv.classList.remove('visible');
-  setTimeout(() => {
-    if (!state.contextViewActive) {
-      cv.style.display = 'none';
-      if (state.wasPlayingBeforeContext) {
-        startReading();
+
+    // 6. When both promises complete, scroll to the current word
+    Promise.all([transitionComplete, clusterizeUpdate]).then(() => {
+      const container = document.getElementById('contextScrollArea');
+      const currentEl = document.querySelector('.current-word');
+      
+      if (currentEl && container) {
+        // Calculate the exact scroll position to center the current word
+        const containerRect = container.getBoundingClientRect();
+        const elementRect = currentEl.getBoundingClientRect();
+        const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
+        
+        // Smooth scroll to position
+        container.scrollBy({
+          top: offset,
+          behavior: 'smooth'
+        });
+        
+        // Highlight the current word
+        currentEl.style.animation = 'none';
+        currentEl.offsetHeight; // Trigger reflow
+        currentEl.style.animation = 'pulse 2s ease-in-out';
+        
+        state.initialScrollDone = true;
+        console.log('[DEBUG] Successfully centered and highlighted current word');
+      } else {
+        console.warn('[WARN] Could not find current word or container after update');
       }
-    }
-  }, 300);
-  state.wasPlayingBeforeContext = false;
-  const btn = document.getElementById('contextModeButton');
-  btn.classList.remove('active');
-  btn.innerHTML = `
-    <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M4 6h16M4 12h16M4 18h16"/>
-    </svg>
-    <span>Context View</span>
-  `;
+    });
+
+    // Update the button state
+    const btn = document.getElementById('contextModeButton');
+    btn.classList.add('active');
+    btn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+      <span>Close View</span>
+    `;
+  } catch (error) {
+    console.error('[ERROR] showContextView() failed:', error);
+  }
+}
+
+function hideContextView() {
+  try {
+    console.log('[DEBUG] hideContextView()');
+    state.contextViewActive = false;
+    const cv = document.getElementById('contextView');
+    cv.classList.remove('visible');
+    setTimeout(() => {
+      if (!state.contextViewActive) {
+        cv.style.display = 'none';
+        if (state.wasPlayingBeforeContext) {
+          console.log('[DEBUG] Resuming reading after hiding context view.');
+          startReading();
+        }
+      }
+    }, 300);
+    state.wasPlayingBeforeContext = false;
+    const btn = document.getElementById('contextModeButton');
+    btn.classList.remove('active');
+    btn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+      <span>Context View</span>
+    `;
+  } catch (error) {
+    console.error('[ERROR] hideContextView() failed:', error);
+  }
 }
 
 /* ========================================================================
@@ -930,6 +1061,7 @@ function toggleChaptersList() {
     updateChaptersList();
   }
 }
+
 function updateChaptersList() {
   const list = document.getElementById('chaptersList');
   list.innerHTML = '';
@@ -954,6 +1086,7 @@ function updateChaptersList() {
     list.appendChild(div);
   }
 }
+
 function jumpToChapter(pos) {
   pushToUndoStack(state.currentIndex);
   state.currentIndex = pos;
@@ -962,12 +1095,15 @@ function jumpToChapter(pos) {
   scrollIndexIntoView(pos);
   document.getElementById('chaptersList').classList.remove('visible');
 }
+
 function pushToUndoStack(pos) {
+  console.log('[DEBUG] pushToUndoStack() pos=', pos);
   state.undoStack.push(pos);
   if (state.undoStack.length > 20) {
     state.undoStack.shift();
   }
 }
+
 function undoLastPosition() {
   if (state.undoStack.length > 0) {
     const last = state.undoStack.pop();
@@ -991,6 +1127,7 @@ function setTheme(theme) {
     btn.classList.toggle('active', btn.dataset.theme === theme);
   });
 }
+
 function toggleThemeMenu() {
   const menu = document.getElementById('themeMenu');
   menu.classList.toggle('active');
@@ -998,7 +1135,7 @@ function toggleThemeMenu() {
 
 /* ========================================================================
    PROGRESS NAV
-========================================================================= */
+======================================================================== */
 function setupProgressNav() {
   const nav = document.getElementById('progressNav');
   const fill = document.getElementById('progressNavFill');
@@ -1025,11 +1162,16 @@ function setupProgressNav() {
     if (tY > maxY) tY = maxY;
     tooltip.style.top = tY + 'px';
     wordDisp.textContent = state.words[i] || '';
+    console.log(`Progress navigation updated: Word ${i + 1} / ${state.words.length} (${pct}%)`);
     return i;
   }
   function onDragStart(e) {
+    console.log('Progress navigation drag started.');
     isDragging = true;
-    if (state.isPlaying) { pauseReading(); }
+    if (state.isPlaying) { 
+      pauseReading(); 
+      console.log('Reading paused due to progress navigation drag.');
+    }
     onDragMove(e);
   }
   function onDragMove(e) {
@@ -1041,11 +1183,13 @@ function setupProgressNav() {
   }
   function onDragEnd() {
     if (!isDragging) return;
+    console.log('Progress navigation drag ended.');
     isDragging = false;
     saveProgress(false);
     if (state.contextViewActive && state.clusterize) {
       rebuildRowsAndRefreshCluster();
       scrollIndexIntoView(state.currentIndex);
+      console.log(`Progress navigation set to index ${state.currentIndex}.`);
     }
   }
   nav.addEventListener('mousedown', onDragStart);
@@ -1060,10 +1204,13 @@ function setupProgressNav() {
       const style = window.getComputedStyle(nav);
       const op = style.opacity;
       nav.style.opacity = (op === '1') ? '0' : '1';
+      console.log(`Progress navigation visibility toggled to: ${nav.style.opacity === '1' ? 'visible' : 'hidden'}`);
     }
   });
   tooltip.style.opacity = '1';
+  console.log('Progress navigation set up.');
 }
+
 function updateProgressNav() {
   if (state.words.length < 2) return;
   const fill = document.getElementById('progressNavFill');
@@ -1076,12 +1223,16 @@ function updateProgressNav() {
   wordNumber.textContent = (state.currentIndex + 1).toString();
   totalWords.textContent = state.words.length.toString();
   wordPreview.textContent = state.words[state.currentIndex] || '';
+  console.log(`Progress navigation updated: Word ${state.currentIndex + 1} / ${state.words.length} (${pct}%)`);
 }
+
 function scrollCurrentWordIntoView(smooth = true) {
+  console.log(`Scrolling current word into view. Smooth: ${smooth}`);
   requestAnimationFrame(() => {
     const currentEl = document.querySelector('.current-word');
     const container = document.getElementById('contextScrollArea');
     if (!currentEl || !container) {
+      console.warn('current-word element or contextScrollArea container not found.');
       buildAllRows();
       if (state.clusterize) {
         state.clusterize.update(state.allRows);
@@ -1098,6 +1249,7 @@ function scrollCurrentWordIntoView(smooth = true) {
             rebuiltEl.style.animation = 'none';
             rebuiltEl.offsetHeight;
             rebuiltEl.style.animation = 'pulse 2s ease-in-out';
+            console.log('Scrolled to rebuilt current word.');
           }
         }, 50);
       }
@@ -1112,15 +1264,46 @@ function scrollCurrentWordIntoView(smooth = true) {
         top: offset,
         behavior: smooth ? 'smooth' : 'auto'
       });
+      console.log('Scrolled to current word with offset:', offset);
     }
     currentEl.style.animation = 'none';
     currentEl.offsetHeight;
     currentEl.style.animation = 'pulse 2s ease-in-out';
   });
 }
+
 // Simple helper for events
 function on(evt, element, fnc) {
   return element.addEventListener ? element.addEventListener(evt, fnc, false) : element.attachEvent("on" + evt, fnc);
+}
+
+// Update Clusterize initialization to use the new callback structure
+function initializeClusterize() {
+  let clusterizeInitialized = false;
+  state.clusterize = new Clusterize({
+    scrollId: 'contextScrollArea',
+    contentId: 'chunksContainer',
+    rows: state.allRows,
+    no_data_text: 'No data',
+    rows_in_block: 50,
+    blocks_in_cluster: 4,
+    callbacks: {
+      clusterWillChange: function() {
+        if (clusterizeInitialized) {
+          const container = document.getElementById('contextScrollArea');
+          if (container && state.clusterize) {
+            state.clusterize.options.scroll_top = container.scrollTop;
+            console.log('[DEBUG] clusterWillChange: scrollTop:', container.scrollTop);
+          }
+        }
+      },
+      clusterChanged: function() {
+        // This will be overridden when needed
+      }
+    }
+  });
+  clusterizeInitialized = true;
+  return state.clusterize;
 }
 </script>
 
