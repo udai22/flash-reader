@@ -48,8 +48,8 @@
       width: 100vw;
       overflow: hidden;
       transition: background-color 0.3s, color 0.3s;
+      padding-bottom: 90px; /* extra space for bottom controls */
     }
-
     .reader-container {
       position: relative;
       width: 100%;
@@ -70,91 +70,7 @@
       z-index: 100;
     }
 
-    /* ============== THEME & WPM CONTROLS ============== */
-    .theme-toggle {
-      position: fixed;
-      right: 16px;
-      top: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      z-index: 10002;
-    }
-    .theme-buttons {
-      display: flex;
-      gap: 8px;
-      background: var(--button-bg);
-      padding: 4px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    .theme-button {
-      padding: 8px 12px;
-      border: none;
-      border-radius: 4px;
-      background: transparent;
-      color: var(--text-color);
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .theme-button.active {
-      background: var(--primary-color);
-      color: #fff;
-    }
-    .theme-button:hover:not(.active) {
-      background: var(--button-hover);
-    }
-
-    .wpm-controls {
-      background: var(--button-bg);
-      padding: 8px 12px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    .wpm-controls button {
-      width: 44px;
-      height: 44px;
-      border: none;
-      border-radius: 10px;
-      background: var(--bg-color);
-      color: var(--text-color);
-      cursor: pointer;
-    }
-    .wpm-value {
-      font-size: 16px;
-      font-weight: 600;
-      min-width: 70px;
-      text-align: center;
-    }
-
-    .context-mode-button {
-      width: 100%;
-      padding: 8px 12px;
-      background: var(--button-bg);
-      border: 1px solid var(--progress-bg);
-      border-radius: 8px;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-
-      pointer-events: none; /* disabled until data is loaded */
-      opacity: 0.5;        /* visually dimmed */
-      transition: opacity 0.2s, pointer-events 0.2s;
-    }
-    .context-mode-button.active {
-      background: var(--primary-color);
-      color: #fff;
-      border-color: var(--primary-color);
-    }
-
-    /* ============== SINGLE-WORD READER ============== */
+    /* ====================== SINGLE WORD DISPLAY ====================== */
     .word-boundary {
       position: absolute;
       left: 50%;
@@ -172,13 +88,135 @@
       font-weight: 500;
     }
 
-    /* Hide certain controls when context overlay is shown */
-    .context-view.visible ~ .theme-toggle,
-    .context-view.visible ~ .wpm-indicator {
+    /* ===================== BOTTOM CONTROLS BAR ===================== */
+    .bottom-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 90px;
+      background: var(--surface-color);
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 24px;
+      padding: 0 16px;
+      z-index: 10002;
+    }
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    /* Use existing button styles for controls */
+    .control-group button {
+      padding: 8px 12px;
+      background: var(--button-bg);
+      color: var(--text-color);
+      border: 1px solid var(--progress-bg);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    /* WPM value display */
+    .wpm-value {
+      font-size: 16px;
+      font-weight: 600;
+      min-width: 70px;
+      text-align: center;
+    }
+    /* Theme dropdown styling matching original buttons */
+    .theme-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+    .theme-dropdown-button {
+      padding: 8px 12px;
+      background: var(--button-bg);
+      color: var(--text-color);
+      border: 1px solid var(--progress-bg);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .theme-dropdown-menu {
+      position: absolute;
+      bottom: 110%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface-color);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      overflow: hidden;
       display: none;
+      flex-direction: column;
+      min-width: 100px;
+      z-index: 10003;
+    }
+    .theme-dropdown-menu.active {
+      display: flex;
+    }
+    .theme-dropdown-menu button {
+      padding: 8px 12px;
+      background: var(--button-bg);
+      border: none;
+      text-align: left;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .theme-dropdown-menu button.active {
+      background: var(--primary-color);
+      color: #fff;
+    }
+    .theme-dropdown-menu button:hover:not(.active) {
+      background: var(--button-hover);
     }
 
-    /* ============== CONTEXT VIEW OVERLAY ============== */
+    /* ====================== CONTEXT VIEW TOGGLE BUTTON ====================== */
+    .context-mode-button {
+      padding: 8px 12px;
+      background: var(--button-bg);
+      color: var(--text-color);
+      border: 1px solid var(--progress-bg);
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .context-mode-button.active {
+      background: var(--primary-color);
+      color: #fff;
+      border-color: var(--primary-color);
+    }
+
+    /* ====================== WPM INDICATOR ====================== */
+    .wpm-indicator {
+      position: fixed;
+      right: 16px;
+      top: 80px;
+      background: var(--surface-color);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s, transform 0.3s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 100;
+    }
+    .wpm-indicator.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ====================== CONTEXT VIEW OVERLAY ====================== */
     .context-view {
       display: none;
       position: fixed;
@@ -192,7 +230,6 @@
       display: block;
       opacity: 1;
     }
-
     .context-header {
       position: sticky;
       top: 0;
@@ -212,15 +249,17 @@
     .chapters-button,
     .context-undo,
     .context-close-button {
-      border: 1px solid var(--progress-bg);
-      background: var(--surface-color);
       padding: 8px 12px;
+      background: var(--button-bg);
+      color: var(--text-color);
+      border: 1px solid var(--progress-bg);
       border-radius: 8px;
       font-size: 14px;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .chapters-list {
       position: absolute;
@@ -259,7 +298,7 @@
       font-weight: 500;
     }
 
-    /* Clusterize containers: we make them fill parent */
+    /* ===================== CLUSTERIZE / CONTEXT VIEW ===================== */
     .context-content-wrapper {
       width: 100%;
       height: calc(100vh - 60px);
@@ -277,8 +316,19 @@
       opacity: 0.6;
       font-style: italic;
     }
+    .clusterize table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .clusterize td {
+      padding: 8px 0;
+      line-height: 1.8;
+    }
+    #contextScrollArea {
+      scroll-behavior: smooth;
+    }
 
-    /* Word spans within each row */
+    /* ===================== WORD SPANS ===================== */
     .virtual-word {
       cursor: pointer;
       padding: 4px 6px;
@@ -294,7 +344,7 @@
     }
     .current-word {
       background: var(--primary-color) !important;
-      color: white !important;
+      color: #fff !important;
       font-weight: 600;
       padding: 4px 6px;
       margin: 0 1px;
@@ -315,28 +365,7 @@
       letter-spacing: 0.5px;
     }
 
-    /* ============== WPM INDICATOR ============== */
-    .wpm-indicator {
-      position: fixed;
-      right: 16px;
-      top: 80px;
-      background: var(--surface-color);
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 500;
-      opacity: 0;
-      transform: translateY(-10px);
-      transition: opacity 0.3s, transform 0.3s;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      z-index: 100;
-    }
-    .wpm-indicator.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* ============== PROGRESS NAV (RIGHT) ============== */
+    /* ===================== PROGRESS NAV (RIGHT) ===================== */
     .progress-nav {
       position: fixed;
       right: 24px;
@@ -350,7 +379,8 @@
     }
     .progress-nav-fill {
       position: absolute;
-      bottom: 0; left: 0;
+      bottom: 0;
+      left: 0;
       width: 100%;
       background: var(--progress-fill);
       border-radius: 4px;
@@ -375,66 +405,30 @@
       font-weight: 500;
     }
 
-    /* Improve table layout in context view */
-    .clusterize table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .clusterize td {
-      padding: 8px 0;
-      line-height: 1.8;
-    }
-
-    /* Add smooth scrolling to context content */
-    #contextScrollArea {
-      scroll-behavior: smooth;
+    /* ===================== PULSE ANIMATION ===================== */
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
     }
   </style>
 </head>
-
 <body>
 <div class="reader-container">
   <!-- ============== BACK BUTTON ============== -->
   <button class="back-button" onclick="window.location.href='/'">← Back</button>
-
-  <!-- ============== THEME & WPM CONTROLS ============== -->
-  <div class="theme-toggle">
-    <div class="theme-buttons">
-      <button class="theme-button active" data-theme="light">Light</button>
-      <button class="theme-button" data-theme="dark">Dark</button>
-      <button class="theme-button" data-theme="sand">Sand</button>
-    </div>
-    <div class="wpm-controls">
-      <!-- Skip -50 words -->
-      <button onclick="jumpWords(-50)">-50</button>
-      <!-- WPM decrease -->
-      <button onclick="updateWPM(state.currentWPM - 25)">-25</button>
-      <div class="wpm-value"><span id="wpmValueTop">300</span> WPM</div>
-      <!-- WPM increase -->
-      <button onclick="updateWPM(state.currentWPM + 25)">+25</button>
-      <!-- Skip +50 words -->
-      <button onclick="jumpWords(50)">+50</button>
-    </div>
-    <button class="context-mode-button" id="contextModeButton" onclick="toggleContextView()">
-      <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M4 6h16M4 12h16M4 18h16"/>
-      </svg>
-      <span>Context View</span>
-    </button>
-  </div>
 
   <!-- ============== SINGLE WORD DISPLAY ============== -->
   <div class="word-boundary" id="wordBoundary">
     <div class="word-display" id="wordDisplay">Tap to start reading</div>
   </div>
 
-  <!-- ============== WPM INDICATOR ============== -->
+  <!-- ============== WPM INDICATOR ====================== -->
   <div class="wpm-indicator" id="wpmIndicator">
     <span id="wpmIndicatorValue">300</span> WPM
   </div>
 
-  <!-- ============== CONTEXT VIEW ============== -->
+  <!-- ============== CONTEXT VIEW (OVERLAY) ====================== -->
   <div class="context-view" id="contextView">
     <div class="context-header">
       <div class="chapters-dropdown">
@@ -444,8 +438,6 @@
       <button class="context-undo" onclick="undoLastPosition()">Undo</button>
       <button class="context-close-button" onclick="hideContextView()">Close</button>
     </div>
-
-    <!-- Clusterize wrapper + table -->
     <div class="context-content-wrapper" id="contextScrollArea">
       <table class="clusterize" style="border-collapse:collapse;width:100%;">
         <tbody id="chunksContainer" class="clusterize-content"></tbody>
@@ -454,12 +446,45 @@
     </div>
   </div>
 
-  <!-- ============== PROGRESS NAV (RIGHT) ============== -->
+  <!-- ============== PROGRESS NAV (RIGHT) ====================== -->
   <div class="progress-nav" id="progressNav">
     <div class="progress-nav-fill" id="progressNavFill"></div>
     <div class="progress-nav-tooltip" id="progressNavTooltip">
       <div>Word <span id="wordNumber">0</span> / <span id="totalWords">0</span></div>
       <div class="word-preview" id="wordPreview"></div>
+    </div>
+  </div>
+
+  <!-- ============== BOTTOM CONTROLS BAR ====================== -->
+  <div class="bottom-bar">
+    <!-- WPM and Skip controls -->
+    <div class="control-group">
+      <button onclick="jumpWords(-50)">-50</button>
+      <button onclick="updateWPM(state.currentWPM - 25)">-25</button>
+      <div class="wpm-value"><span id="wpmValueTop">300</span> WPM</div>
+      <button onclick="updateWPM(state.currentWPM + 25)">+25</button>
+      <button onclick="jumpWords(50)">+50</button>
+    </div>
+    <!-- Context view toggle -->
+    <div class="control-group">
+      <button class="context-mode-button" id="contextModeButton" onclick="toggleContextView()">
+        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+        <span>Context View</span>
+      </button>
+    </div>
+    <!-- Theme dropdown -->
+    <div class="control-group">
+      <div class="theme-dropdown">
+        <button class="theme-dropdown-button" onclick="toggleThemeMenu()">Theme</button>
+        <div class="theme-dropdown-menu" id="themeMenu">
+          <button data-theme="light" onclick="setTheme(this.dataset.theme); toggleThemeMenu();" class="theme-option">Light</button>
+          <button data-theme="dark" onclick="setTheme(this.dataset.theme); toggleThemeMenu();" class="theme-option">Dark</button>
+          <button data-theme="sand" onclick="setTheme(this.dataset.theme); toggleThemeMenu();" class="theme-option">Sand</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -476,63 +501,41 @@ const state = {
   words: [],
   chapters: [],
   undoStack: [],
-
-  // WPM + Reading
   currentWPM: parseInt(localStorage.getItem('reader-wpm'), 10) || 300,
   readingInterval: null,
   minWPM: 100,
   maxWPM: 1200,
-
-  // Context + Virtual Scroll
   contextViewActive: false,
   wasPlayingBeforeContext: false,
-  clusterize: null,   // We'll store our Clusterize instance here
-  allRows: [],        // All HTML rows for clusterize
-  wordsPerRow: 10,    // You can change how many words you show per row
-
-  // Throttle saving
+  clusterize: null,
+  allRows: [],
+  wordsPerRow: 10,
   saveTimeout: null,
 };
-
 
 /* ========================================================================
    MAIN SETUP
 ========================================================================= */
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    // Optional: wait for fonts
     if (document.fonts && document.fonts.ready) {
       await document.fonts.ready.catch(() => {});
     }
-
-    // Fetch book content
     const resp = await fetch(`/api/book/{{ book.id }}/content`);
     if (!resp.ok) {
       throw new Error('Failed to fetch book content');
     }
     const data = await resp.json();
-
-    // Tokenize content
     const rawContent = data.content || '';
     const tokens = rawContent.match(/\w+|\S/g) || [];
     state.words = tokens;
-
-    // Current position
     const pos = parseInt(data.current_position, 10) || 0;
     state.currentIndex = Math.min(Math.max(pos, 0), state.words.length - 1);
-
-    // Chapters
     state.chapters = data.chapters || [];
-
-    // Build the “rows” array for Clusterize
     buildAllRows();
-
-    // Initialize UI
     updateAllUI();
     setupEventListeners();
     setupProgressNav();
-
-    // Initialize the Clusterize instance
     let clusterizeInitialized = false;
     state.clusterize = new Clusterize({
       scrollId: 'contextScrollArea',
@@ -543,7 +546,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       blocks_in_cluster: 4,
       callbacks: {
         clusterWillChange: function() {
-          // Only save scroll position after initialization
           if (clusterizeInitialized) {
             const container = document.getElementById('contextScrollArea');
             if (container && state.clusterize) {
@@ -552,7 +554,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         },
         clusterChanged: function() {
-          // After cluster changes, restore scroll and attach handlers
           if (state.contextViewActive) {
             attachWordClickHandlers();
             if (!state.initialScrollDone) {
@@ -563,17 +564,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
     clusterizeInitialized = true;
-
-    // Enable context button
-    const ctxBtn = document.getElementById('contextModeButton');
-    ctxBtn.style.pointerEvents = 'auto';
-    ctxBtn.style.opacity = '1';
-
   } catch (err) {
     console.error('Error during initialization:', err);
   }
 });
-
 
 /* ========================================================================
    BUILDING ROWS FOR CLUSTERIZE
@@ -583,37 +577,26 @@ function buildAllRows() {
   let chapterIndex = 0;
   let nextChapterPos = (state.chapters.length) ? state.chapters[0].position : -1;
   let chapterTitle = (state.chapters.length) ? state.chapters[0].title : null;
-
-  // Increase words per row for better readability
   state.wordsPerRow = 22;
-
   let rowWords = [];
-  let rowCount = 0;
   let currentWordFound = false;
-
   for (let i = 0; i < state.words.length; i++) {
-    // Insert chapter indicator if needed
     if (chapterIndex < state.chapters.length && i === nextChapterPos) {
       if (rowWords.length > 0) {
-        // Flush current row before chapter indicator
-        const rowHTML = rowWords
-          .map(({ word, index }) => {
-            const isCurrentWord = index === state.currentIndex;
-            if (isCurrentWord) currentWordFound = true;
-            const cls = isCurrentWord ? 'current-word' : 'virtual-word';
-            return `<span class="${cls}" data-index="${index}">${word}</span>`;
-          })
-          .join(' ');
+        const rowHTML = rowWords.map(({ word, index }) => {
+          const isCurrentWord = index === state.currentIndex;
+          if (isCurrentWord) currentWordFound = true;
+          const cls = isCurrentWord ? 'current-word' : 'virtual-word';
+          return `<span class="${cls}" data-index="${index}">${word}</span>`;
+        }).join(' ');
         state.allRows.push(`<tr><td>${rowHTML}</td></tr>`);
         rowWords = [];
       }
-
       state.allRows.push(`
         <tr><td>
           <div class="chapter-indicator">${chapterTitle}</div>
         </td></tr>
       `);
-
       chapterIndex++;
       if (chapterIndex < state.chapters.length) {
         nextChapterPos = state.chapters[chapterIndex].position;
@@ -622,30 +605,21 @@ function buildAllRows() {
         nextChapterPos = -1;
       }
     }
-
     rowWords.push({ word: state.words[i], index: i });
-
     if (rowWords.length >= state.wordsPerRow || i === state.words.length - 1) {
-      const rowHTML = rowWords
-        .map(({ word, index }) => {
-          const isCurrentWord = index === state.currentIndex;
-          if (isCurrentWord) currentWordFound = true;
-          const cls = isCurrentWord ? 'current-word' : 'virtual-word';
-          return `<span class="${cls}" data-index="${index}">${word}</span>`;
-        })
-        .join(' ');
-
+      const rowHTML = rowWords.map(({ word, index }) => {
+        const isCurrentWord = index === state.currentIndex;
+        if (isCurrentWord) currentWordFound = true;
+        const cls = isCurrentWord ? 'current-word' : 'virtual-word';
+        return `<span class="${cls}" data-index="${index}">${word}</span>`;
+      }).join(' ');
       state.allRows.push(`<tr><td>${rowHTML}</td></tr>`);
       rowWords = [];
-      rowCount++;
     }
   }
-
   return currentWordFound;
 }
-
 function rebuildRowsAndRefreshCluster() {
-  // Rebuild all rows with the new "current word" highlight
   buildAllRows();
   if (state.clusterize) {
     state.clusterize.update(state.allRows);
@@ -653,44 +627,30 @@ function rebuildRowsAndRefreshCluster() {
   attachWordClickHandlers();
 }
 
-
 /* ========================================================================
-   CLICK EVENTS ON WORDS
+   CLICK EVENTS ON WORDS (in Context View)
 ========================================================================= */
 function attachWordClickHandlers() {
   const container = document.getElementById('chunksContainer');
   if (!container) return;
-
-  // Remove existing handlers by cloning
   const oldWords = container.querySelectorAll('.virtual-word, .current-word');
   oldWords.forEach(el => {
     const clone = el.cloneNode(true);
     el.parentNode.replaceChild(clone, el);
   });
-
-  // Attach new handlers
   const words = container.querySelectorAll('.virtual-word, .current-word');
   words.forEach(el => {
     el.addEventListener('click', (e) => {
       e.preventDefault();
       const newIndex = parseInt(e.target.dataset.index, 10);
       if (!isNaN(newIndex) && newIndex !== state.currentIndex) {
-        // Save current position for undo
         pushToUndoStack(state.currentIndex);
-
-        // Update position
         state.currentIndex = newIndex;
-
-        // Update UI
         updateAllUI();
-
-        // Rebuild cluster with new highlight
         buildAllRows();
         if (state.clusterize) {
           state.clusterize.update(state.allRows);
         }
-
-        // Scroll the new word into view
         requestAnimationFrame(() => {
           scrollCurrentWordIntoView(true);
         });
@@ -699,20 +659,16 @@ function attachWordClickHandlers() {
   });
 }
 
-
 /* ========================================================================
    SCROLLING A PARTICULAR INDEX INTO VIEW
 ========================================================================= */
 function scrollIndexIntoView(index) {
-  // In clusterize, we can scroll to a specific row
   const rowNum = Math.floor(index / state.wordsPerRow);
   const container = document.getElementById('contextScrollArea');
   if (container) {
-    // approx 40px per row or so; you can fine-tune as needed
     container.scrollTop = rowNum * 40;
   }
 }
-
 
 /* ========================================================================
    EVENT LISTENERS & UI
@@ -724,7 +680,6 @@ function setupEventListeners() {
       toggleReading();
     }
   });
-
   document.addEventListener('keydown', (e) => {
     switch (e.code) {
       case 'Space':
@@ -756,35 +711,17 @@ function setupEventListeners() {
         jumpWords(100);
         break;
       default:
-        // no-op
         break;
     }
   });
-
-  // Theme buttons
-  const themeBtns = document.querySelectorAll('.theme-button');
-  themeBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      setTheme(btn.dataset.theme);
-    });
-  });
-  setTheme(localStorage.getItem('reader-theme') || 'light');
 }
-
 function updateAllUI() {
   const display = document.getElementById('wordDisplay');
   display.textContent = state.words[state.currentIndex] || '';
-
-  // Update the right-edge progress bar
   updateProgressNav();
-
-  // WPM display
   document.getElementById('wpmValueTop').textContent = state.currentWPM.toString();
-
-  // Throttle saving
   saveProgress(false);
 }
-
 
 /* ========================================================================
    READING CONTROL
@@ -798,15 +735,12 @@ function toggleReading() {
     document.getElementById('progressNavTooltip').style.opacity = '0';
   }
 }
-
 function startReading() {
   pauseReading();
   state.isPlaying = true;
-
   const intervalMS = 60000 / state.currentWPM;
   const disp = document.getElementById('wordDisplay');
   disp.textContent = state.words[state.currentIndex] || '';
-
   state.readingInterval = setInterval(() => {
     if (state.currentIndex >= state.words.length - 1) {
       pauseReading();
@@ -818,7 +752,6 @@ function startReading() {
     saveProgress(false);
   }, intervalMS);
 }
-
 function pauseReading() {
   state.isPlaying = false;
   if (state.readingInterval) {
@@ -826,7 +759,6 @@ function pauseReading() {
     state.readingInterval = null;
   }
 }
-
 function jumpWords(offset) {
   const oldIndex = state.currentIndex;
   let newIndex = oldIndex + offset;
@@ -834,7 +766,6 @@ function jumpWords(offset) {
   pushToUndoStack(oldIndex);
   state.currentIndex = newIndex;
   updateAllUI();
-
   if (state.isPlaying) {
     pauseReading();
     startReading();
@@ -844,7 +775,6 @@ function jumpWords(offset) {
     scrollIndexIntoView(newIndex);
   }
 }
-
 
 /* ========================================================================
    SAVE PROGRESS
@@ -861,11 +791,9 @@ function saveProgress(immediate) {
     doSaveProgress();
   }, 1000);
 }
-
 async function doSaveProgress() {
   localStorage.setItem('reader-wpm', state.currentWPM);
   localStorage.setItem(`book-{{ book.id }}-position`, state.currentIndex);
-
   try {
     await fetch(`/api/book/{{ book.id }}/position`, {
       method: 'POST',
@@ -877,7 +805,6 @@ async function doSaveProgress() {
   }
 }
 
-
 /* ========================================================================
    WPM CONTROL
 ========================================================================= */
@@ -885,17 +812,14 @@ let wpmIndicatorTimer;
 function updateWPM(val) {
   const w = Math.max(state.minWPM, Math.min(state.maxWPM, val));
   state.currentWPM = w;
-
   document.getElementById('wpmValueTop').textContent = String(w);
   document.getElementById('wpmIndicatorValue').textContent = String(w);
   showWPMIndicator();
-
   if (state.isPlaying) {
     pauseReading();
     startReading();
   }
 }
-
 function showWPMIndicator() {
   const ind = document.getElementById('wpmIndicator');
   ind.classList.add('visible');
@@ -907,7 +831,6 @@ function showWPMIndicator() {
   }, 1500);
 }
 
-
 /* ========================================================================
    CONTEXT VIEW TOGGLE
 ========================================================================= */
@@ -918,37 +841,27 @@ function toggleContextView() {
     showContextView();
   }
 }
-
 function showContextView() {
-  // Save reading state
   state.wasPlayingBeforeContext = state.isPlaying;
   if (state.isPlaying) {
     pauseReading();
   }
-
   state.contextViewActive = true;
   state.initialScrollDone = false;
   const cv = document.getElementById('contextView');
-
-  // Rebuild rows and ensure current word is included
   const currentWordFound = buildAllRows();
   if (!currentWordFound) {
     state.currentIndex = Math.max(0, Math.min(state.currentIndex, state.words.length - 1));
     buildAllRows();
   }
-
   const currentChunkIndex = Math.floor(state.currentIndex / state.wordsPerRow);
-  const viewportChunks = 7;
-  const startChunk = Math.max(0, currentChunkIndex - Math.floor(viewportChunks/2));
   const container = document.getElementById('contextScrollArea');
   const chunkHeight = 40;
   const scrollOffset = currentChunkIndex * chunkHeight;
-
   if (state.clusterize) {
     state.clusterize.options.scroll_top = scrollOffset;
     state.clusterize.update(state.allRows);
   }
-
   cv.style.display = 'block';
   requestAnimationFrame(() => {
     cv.classList.add('visible');
@@ -973,7 +886,6 @@ function showContextView() {
       }
     });
   });
-
   const btn = document.getElementById('contextModeButton');
   btn.classList.add('active');
   btn.innerHTML = `
@@ -984,12 +896,10 @@ function showContextView() {
     <span>Close View</span>
   `;
 }
-
 function hideContextView() {
   state.contextViewActive = false;
   const cv = document.getElementById('contextView');
   cv.classList.remove('visible');
-
   setTimeout(() => {
     if (!state.contextViewActive) {
       cv.style.display = 'none';
@@ -998,9 +908,7 @@ function hideContextView() {
       }
     }
   }, 300);
-
   state.wasPlayingBeforeContext = false;
-
   const btn = document.getElementById('contextModeButton');
   btn.classList.remove('active');
   btn.innerHTML = `
@@ -1012,9 +920,8 @@ function hideContextView() {
   `;
 }
 
-
 /* ========================================================================
-   CHAPTERS
+   CHAPTERS & UNDO
 ========================================================================= */
 function toggleChaptersList() {
   const list = document.getElementById('chaptersList');
@@ -1023,20 +930,13 @@ function toggleChaptersList() {
     updateChaptersList();
   }
 }
-
 function updateChaptersList() {
   const list = document.getElementById('chaptersList');
   list.innerHTML = '';
-
   for (let i = 0; i < state.chapters.length; i++) {
     const chap = state.chapters[i];
-    const nextPos = (i < state.chapters.length - 1)
-      ? state.chapters[i+1].position
-      : state.words.length;
-
-    const inThisChapter =
-      (state.currentIndex >= chap.position && state.currentIndex < nextPos);
-
+    const nextPos = (i < state.chapters.length - 1) ? state.chapters[i+1].position : state.words.length;
+    const inThisChapter = (state.currentIndex >= chap.position && state.currentIndex < nextPos);
     let progress = 0;
     if (inThisChapter) {
       const chapterSize = nextPos - chap.position;
@@ -1045,7 +945,6 @@ function updateChaptersList() {
     } else if (state.currentIndex >= nextPos) {
       progress = 100;
     }
-
     const div = document.createElement('div');
     div.className = 'chapter-item' + (inThisChapter ? ' current' : '');
     div.innerHTML = `${chap.title} <span style="float:right;">${progress}%</span>`;
@@ -1055,7 +954,6 @@ function updateChaptersList() {
     list.appendChild(div);
   }
 }
-
 function jumpToChapter(pos) {
   pushToUndoStack(state.currentIndex);
   state.currentIndex = pos;
@@ -1064,18 +962,12 @@ function jumpToChapter(pos) {
   scrollIndexIntoView(pos);
   document.getElementById('chaptersList').classList.remove('visible');
 }
-
-
-/* ========================================================================
-   UNDO STACK
-========================================================================= */
 function pushToUndoStack(pos) {
   state.undoStack.push(pos);
   if (state.undoStack.length > 20) {
     state.undoStack.shift();
   }
 }
-
 function undoLastPosition() {
   if (state.undoStack.length > 0) {
     const last = state.undoStack.pop();
@@ -1088,20 +980,21 @@ function undoLastPosition() {
   }
 }
 
-
 /* ========================================================================
-   THEME
+   THEME DROPDOWN
 ========================================================================= */
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('reader-theme', theme);
-
-  const btns = document.querySelectorAll('.theme-button');
-  btns.forEach((btn) => {
+  const themeButtons = document.querySelectorAll('.theme-dropdown-menu button');
+  themeButtons.forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.theme === theme);
   });
 }
-
+function toggleThemeMenu() {
+  const menu = document.getElementById('themeMenu');
+  menu.classList.toggle('active');
+}
 
 /* ========================================================================
    PROGRESS NAV
@@ -1111,26 +1004,19 @@ function setupProgressNav() {
   const fill = document.getElementById('progressNavFill');
   const tooltip = document.getElementById('progressNavTooltip');
   const wordDisp = document.getElementById('wordDisplay');
-
   let isDragging = false;
-
   function updateFromY(clientY) {
     const rect = nav.getBoundingClientRect();
     let ratio = 1 - (clientY - rect.top) / rect.height;
     ratio = Math.max(0, Math.min(ratio, 1));
-
     let i = Math.floor(ratio * (state.words.length - 1));
     i = Math.max(0, Math.min(i, state.words.length - 1));
-
     const pct = Math.round((i / (state.words.length - 1)) * 100);
     fill.style.height = pct + '%';
-
     tooltip.innerHTML = `
       <div>Word ${i + 1} / ${state.words.length} (${pct}%)</div>
       <div class="word-preview">${state.words[i] || ''}</div>
     `;
-
-    // Position tooltip
     const tRect = tooltip.getBoundingClientRect();
     let tY = clientY - (tRect.height / 2);
     const minY = rect.top;
@@ -1138,50 +1024,37 @@ function setupProgressNav() {
     if (tY < minY) tY = minY;
     if (tY > maxY) tY = maxY;
     tooltip.style.top = tY + 'px';
-
     wordDisp.textContent = state.words[i] || '';
     return i;
   }
-
   function onDragStart(e) {
     isDragging = true;
-    if (state.isPlaying) {
-      pauseReading();
-    }
+    if (state.isPlaying) { pauseReading(); }
     onDragMove(e);
   }
-
   function onDragMove(e) {
     if (!isDragging) return;
     e.preventDefault();
-    const clientY = e.type.includes('touch')
-      ? e.touches[0].clientY
-      : e.clientY;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
     state.currentIndex = updateFromY(clientY);
     updateProgressNav();
   }
-
   function onDragEnd() {
     if (!isDragging) return;
     isDragging = false;
     saveProgress(false);
-
     if (state.contextViewActive && state.clusterize) {
       rebuildRowsAndRefreshCluster();
       scrollIndexIntoView(state.currentIndex);
     }
   }
-
   nav.addEventListener('mousedown', onDragStart);
   document.addEventListener('mousemove', onDragMove);
   document.addEventListener('mouseup', onDragEnd);
-
   nav.addEventListener('touchstart', onDragStart, { passive: false });
   document.addEventListener('touchmove', onDragMove, { passive: false });
   document.addEventListener('touchend', onDragEnd);
   document.addEventListener('touchcancel', onDragEnd);
-
-  // Press "N" to toggle nav visibility
   document.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() === 'n') {
       const style = window.getComputedStyle(nav);
@@ -1189,34 +1062,26 @@ function setupProgressNav() {
       nav.style.opacity = (op === '1') ? '0' : '1';
     }
   });
-
   tooltip.style.opacity = '1';
 }
-
 function updateProgressNav() {
   if (state.words.length < 2) return;
-
   const fill = document.getElementById('progressNavFill');
   const wordNumber = document.getElementById('wordNumber');
   const totalWords = document.getElementById('totalWords');
   const wordPreview = document.getElementById('wordPreview');
-
   const ratio = state.currentIndex / (state.words.length - 1);
   const pct = ratio * 100;
   fill.style.height = pct + '%';
-
   wordNumber.textContent = (state.currentIndex + 1).toString();
   totalWords.textContent = state.words.length.toString();
   wordPreview.textContent = state.words[state.currentIndex] || '';
 }
-
 function scrollCurrentWordIntoView(smooth = true) {
   requestAnimationFrame(() => {
     const currentEl = document.querySelector('.current-word');
     const container = document.getElementById('contextScrollArea');
-
     if (!currentEl || !container) {
-      // Force rebuild if missing
       buildAllRows();
       if (state.clusterize) {
         state.clusterize.update(state.allRows);
@@ -1226,29 +1091,21 @@ function scrollCurrentWordIntoView(smooth = true) {
             const containerRect = container.getBoundingClientRect();
             const elementRect = rebuiltEl.getBoundingClientRect();
             const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
-
             container.scrollBy({
               top: offset,
               behavior: smooth ? 'smooth' : 'auto'
             });
-
-            // Simple highlight pulse
             rebuiltEl.style.animation = 'none';
-            rebuiltEl.offsetHeight; // Trigger reflow
+            rebuiltEl.offsetHeight;
             rebuiltEl.style.animation = 'pulse 2s ease-in-out';
           }
         }, 50);
       }
       return;
     }
-
-    // If the current word is out of view, center it
     const containerRect = container.getBoundingClientRect();
     const elementRect = currentEl.getBoundingClientRect();
-    const isInView =
-      elementRect.top >= containerRect.top &&
-      elementRect.bottom <= containerRect.bottom;
-
+    const isInView = (elementRect.top >= containerRect.top && elementRect.bottom <= containerRect.bottom);
     if (!isInView) {
       const offset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
       container.scrollBy({
@@ -1256,27 +1113,18 @@ function scrollCurrentWordIntoView(smooth = true) {
         behavior: smooth ? 'smooth' : 'auto'
       });
     }
-
-    // Highlight pulse
     currentEl.style.animation = 'none';
-    currentEl.offsetHeight; // trigger reflow
+    currentEl.offsetHeight;
     currentEl.style.animation = 'pulse 2s ease-in-out';
   });
 }
-
-// Add a quick "pulse" animation
-const style = document.createElement('style');
-style.textContent = `
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
+// Simple helper for events
+function on(evt, element, fnc) {
+  return element.addEventListener ? element.addEventListener(evt, fnc, false) : element.attachEvent("on" + evt, fnc);
 }
-`;
-document.head.appendChild(style);
 </script>
 
-<!-- Inline Clusterize.js (unmodified) -->
+<!-- Inline Clusterize.js -->
 <script>
 /* Clusterize.js - v0.19.0 - 2020
    http://NeXTs.github.com/Clusterize.js/
@@ -1305,7 +1153,6 @@ document.head.appendChild(style);
     if( ! (this instanceof Clusterize))
       return new Clusterize(data);
     var self = this;
-
     var defaults = {
       rows_in_block: 50,
       blocks_in_cluster: 4,
@@ -1316,7 +1163,6 @@ document.head.appendChild(style);
       keep_parity: true,
       callbacks: {}
     }
-
     self.options = {};
     var options = ['rows_in_block', 'blocks_in_cluster', 'show_no_data_row', 'no_data_class', 'no_data_text', 'keep_parity', 'tag', 'callbacks'];
     for(var i = 0, option; option = options[i]; i++) {
@@ -1324,7 +1170,6 @@ document.head.appendChild(style);
         ? data[option]
         : defaults[option];
     }
-
     var elems = ['scroll', 'content'];
     for(var i = 0, elem; elem = elems[i]; i++) {
       self[elem + '_elem'] = data[elem + 'Id']
@@ -1333,16 +1178,11 @@ document.head.appendChild(style);
       if( ! self[elem + '_elem'])
         throw new Error("Error! Could not find " + elem + " element");
     }
-
-    var rows = isArray(data.rows)
-        ? data.rows
-        : self.fetchMarkup(),
+    var rows = isArray(data.rows) ? data.rows : self.fetchMarkup(),
       cache = {},
       scroll_top = self.scroll_elem.scrollTop;
-
     self.insertToDOM(rows, cache);
     self.scroll_elem.scrollTop = scroll_top;
-
     var last_cluster = false,
     scroll_debounce = 0,
     pointer_events_set = false,
@@ -1368,7 +1208,6 @@ document.head.appendChild(style);
     }
     on('scroll', self.scroll_elem, scrollEv);
     on('resize', window, resizeEv);
-
     self.destroy = function(clean) {
       off('scroll', self.scroll_elem, scrollEv);
       off('resize', window, resizeEv);
@@ -1378,9 +1217,7 @@ document.head.appendChild(style);
       if(self.getRowsHeight(rows) || force) self.update(rows);
     }
     self.update = function(new_rows) {
-      rows = isArray(new_rows)
-        ? new_rows
-        : [];
+      rows = isArray(new_rows) ? new_rows : [];
       var scroll_top = self.scroll_elem.scrollTop;
       if(rows.length * self.options.item_height < scroll_top) {
         self.scroll_elem.scrollTop = 0;
@@ -1399,13 +1236,9 @@ document.head.appendChild(style);
       return this.options.scroll_top / (rows.length * this.options.item_height) * 100 || 0;
     }
     var add = function(where, _new_rows) {
-      var new_rows = isArray(_new_rows)
-        ? _new_rows
-        : [];
+      var new_rows = isArray(_new_rows) ? _new_rows : [];
       if( ! new_rows.length) return;
-      rows = where == 'append'
-        ? rows.concat(new_rows)
-        : new_rows.concat(rows);
+      rows = where == 'append' ? rows.concat(new_rows) : new_rows.concat(rows);
       self.insertToDOM(rows, cache);
     }
     self.append = function(rows) {
@@ -1434,8 +1267,7 @@ document.head.appendChild(style);
       this.getRowsHeight(rows);
     },
     getRowsHeight: function(rows) {
-      var opts = this.options,
-        prev_item_height = opts.item_height;
+      var opts = this.options, prev_item_height = opts.item_height;
       opts.cluster_height = 0;
       if( ! rows.length) return;
       var nodes = this.content_elem.children;
@@ -1461,8 +1293,7 @@ document.head.appendChild(style);
     generateEmptyRow: function() {
       var opts = this.options;
       if( ! opts.tag || ! opts.show_no_data_row) return [];
-      var empty_row = document.createElement(opts.tag),
-        no_data_content = document.createTextNode(opts.no_data_text), td;
+      var empty_row = document.createElement(opts.tag), no_data_content = document.createTextNode(opts.no_data_text), td;
       empty_row.className = opts.no_data_class;
       if(opts.tag == 'tr') {
         td = document.createElement('td');
@@ -1473,8 +1304,7 @@ document.head.appendChild(style);
       return [empty_row.outerHTML];
     },
     generate: function (rows, cluster_num) {
-      var opts = this.options,
-        rows_len = rows.length;
+      var opts = this.options, rows_len = rows.length;
       if (rows_len < opts.rows_in_block) {
         return {
           top_offset: 0,
@@ -1521,7 +1351,6 @@ document.head.appendChild(style);
         callbacks = this.options.callbacks,
         layout_start = callbacks.clusterWillChange,
         layout_end = callbacks.clusterChanged;
-
       if(this_cluster_content_changed || top_offset_changed) {
         if(data.top_offset) {
           this_cluster_rows = this.renderExtraTag('top', data.top_offset) + this_cluster_rows;
@@ -1566,7 +1395,6 @@ document.head.appendChild(style);
       return changed;
     }
   }
-
   function on(evt, element, fnc) {
     return element.addEventListener ? element.addEventListener(evt, fnc, false) : element.attachEvent("on" + evt, fnc);
   }
@@ -1579,7 +1407,6 @@ document.head.appendChild(style);
   function getStyle(prop, elem) {
     return window.getComputedStyle ? window.getComputedStyle(elem)[prop] : elem.currentStyle[prop];
   }
-
   return Clusterize;
 }));
 </script>
